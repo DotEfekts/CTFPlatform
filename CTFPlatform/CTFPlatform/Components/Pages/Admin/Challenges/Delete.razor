@@ -1,0 +1,78 @@
+@page "/admin/challenges/{Id:int}/delete"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IConfiguration Config
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Delete Challenge</PageTitle>
+
+<div>
+    <h2>Delete Challenge</h2>
+    <hr />
+    <p>Are you sure you want to delete this challenge?</p>
+    @if (_challenge is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Title</dt>
+            <dd class="col-sm-10">@_challenge.Title</dd>
+        </dl>
+        <dl class="row">
+            <dt class="col-sm-2">Hidden</dt>
+            <dd class="col-sm-10">@(_challenge.Hidden ? "Yes" : "No")</dd>
+        </dl>
+        <dl class="row">
+            <dt class="col-sm-2">Category</dt>
+            <dd class="col-sm-10">@_challenge.Category</dd>
+        </dl>
+        <dl class="row">
+            <dt class="col-sm-2">Description</dt>
+            <dd class="col-sm-10">@_challenge.Description</dd>
+        </dl>
+        <EditForm method="post" Model="_challenge" OnValidSubmit="DeleteChallenge" FormName="delete" Enhance>
+            <button type="submit" class="btn btn-danger" disabled="@(_challenge is null)">Delete</button> |
+            <a href="/admin/challenges">Back to List</a>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private Challenge? _challenge;
+
+    [Parameter]
+    public int Id { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            _challenge = await context.Challenges
+                .Include(t => t.Files)
+                .FirstOrDefaultAsync(m => m.Id == Id);
+
+            if (_challenge is null)
+                NavigationManager.NavigateTo("notfound");
+            
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteChallenge()
+    {
+        await using var context = await DbFactory.CreateDbContextAsync();
+        foreach(var file in _challenge!.Files)
+            if (File.Exists(Config["UploadDirectory"] + Path.DirectorySeparatorChar + file.StorageLocation))
+                File.Delete(Config["UploadDirectory"] + Path.DirectorySeparatorChar + file.StorageLocation);
+        context.Challenges.Remove(_challenge!);
+            
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/admin/challenges");
+    }
+}

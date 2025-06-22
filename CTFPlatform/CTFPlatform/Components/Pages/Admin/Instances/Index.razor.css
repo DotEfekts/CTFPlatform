@@ -1,0 +1,7 @@
+::deep .table td {
+    vertical-align: middle;
+}
+
+::deep .table button {
+    padding: 5px;
+}

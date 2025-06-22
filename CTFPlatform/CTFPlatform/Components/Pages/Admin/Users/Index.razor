@@ -1,0 +1,47 @@
+@page "/admin/users"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@implements IAsyncDisposable
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+
+<PageTitle>Users</PageTitle>
+
+<h2>Users</h2>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <QuickGrid Class="table" Items="_context.Users">
+        <PropertyColumn Property="user => user.Email" Title="Email" />
+        <PropertyColumn Property="@(user => string.IsNullOrWhiteSpace(user.DisplayName) ? "Not Set" : user.DisplayName)" Title="Display Name" />
+        <PropertyColumn Property="user => user.Submissions.Count" Title="Flags Solved"/>
+        <PropertyColumn Property="user => user.Submissions.Sum(f => f.Flag.Points)" Title="Points Earned"/>
+
+        <TemplateColumn Context="user">
+            <a href="@($"admin/users/{user.Id}/edit")">Edit</a> |
+            <a href="@($"admin/users/{user.Id}/details")">Details</a> |
+            <a href="@($"admin/users/{user.Id}/delete")">Delete</a>
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@code {
+    private BlazorCtfPlatformContext? _context;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+}

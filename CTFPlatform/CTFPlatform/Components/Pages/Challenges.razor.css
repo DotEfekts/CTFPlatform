@@ -1,0 +1,10 @@
+.challenge-card {
+    margin: 20px;
+    height: 150px;
+    width: 300px;
+    cursor: pointer;
+}
+
+.challenge-description {
+    text-overflow: ellipsis;
+}

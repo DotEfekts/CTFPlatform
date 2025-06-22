@@ -1,0 +1,91 @@
+@page "/admin/users/{Id:int}/edit"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit User</PageTitle>
+
+<h2>Edit User</h2>
+@if (CtfUser is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="d-flex justify-content-center">
+        <div class="card col-md-5">
+            <div class="card-body">
+                <EditForm method="post" Model="CtfUser" OnValidSubmit="UpdateCtfUser" FormName="edit" Enhance>
+                    <DataAnnotationsValidator />
+                    <ValidationSummary Model="CtfUser" role="alert"/>
+                    <input type="hidden" name="CtfUser.Id" value="@CtfUser.Id" />
+                    <div class="mb-3">
+                        <label for="displayname" class="form-label">Display Name</label>
+                        <InputText id="displayname" @bind-Value="CtfUser.DisplayName" class="form-control" />
+                        <ValidationMessage For="() => CtfUser.DisplayName" class="text-danger" />
+                    </div>
+                    
+                    <div class="d-flex justify-content-end">
+                        <a class="btn btn-secondary me-2" href="/admin/users">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private CtfUser? CtfUser { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            CtfUser ??= await context.Users.FirstOrDefaultAsync(m => m.Id == Id);
+
+            if (CtfUser is null)
+                NavigationManager.NavigateTo("notfound");
+            
+            StateHasChanged();
+        }
+    }
+
+    // To protect from overposting attacks, enable the specific properties you want to bind to.
+    // For more information, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task UpdateCtfUser()
+    {
+        await using var context = await DbFactory.CreateDbContextAsync();
+        CtfUser!.DisplayName = string.IsNullOrWhiteSpace(CtfUser.DisplayName) ? null : CtfUser.DisplayName;
+        context.Attach(CtfUser!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!CtfUserExists(CtfUser!.Id))
+                NavigationManager.NavigateTo("notfound");
+            else
+                throw;
+        }
+
+        NavigationManager.NavigateTo("/ctfusers");
+    }
+
+    private bool CtfUserExists(int id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.Users.Any(e => e.Id == id);
+    }
+}

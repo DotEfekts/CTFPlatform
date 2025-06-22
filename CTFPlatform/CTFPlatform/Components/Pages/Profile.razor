@@ -1,0 +1,146 @@
+@page "/account"
+@using CTFPlatform.Utilities
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.UserRole)]
+@attribute [StreamRendering]
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
+@inject TimeProvider TimeProvider
+
+<PageTitle>Profile</PageTitle>
+
+<div>
+    <h2>User Details</h2>
+    <hr />
+    @if (_user is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else 
+    {
+        <div class="d-flex flex-column align-items-center">
+            <div class="card col-md-5">
+                <div class="card-body">
+                    <div class="d-flex align-content-center">
+                        <img src="@_user.Avatar" alt="@($"Profile image for {_user.DisplayName ?? _user.Email}")" style="max-width: 75px; max-height: 75px;" />
+                        <div class="ms-3">
+                            <dl class="row">
+                                <dt class="col-sm-4">Email</dt>
+                                <dd class="col-sm-8">@_user.Email</dd>
+                                <dt class="col-sm-4">Display Name</dt>
+                                <dd class="col-sm-8">@(_user.DisplayName ?? "Not Set")</dd>
+                                <dt class="col-sm-4">Score</dt>
+                                <dd class="col-sm-8">@_user.Submissions.Count Flags - @_user.Submissions.Sum(t => t.Flag.Points) Points</dd>
+                            </dl>
+                        </div>
+                    </div>
+                    @if (User == null)
+                    {
+                        <div class="d-flex justify-content-end">
+                            @if (!string.IsNullOrWhiteSpace(_user.DisplayName))
+                            {
+                                <button type="button" class="btn btn-danger me-2" @onclick="ClearDisplayName">Clear Display Name</button>
+                            }
+                            <button type="button" class="btn btn-primary" @onclick="EditUser">Edit Display Name</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm method="post" Model="User" OnValidSubmit="UpdateUserName" FormName="edit" Enhance>
+                            <DataAnnotationsValidator />
+                            <ValidationSummary Model="User" role="alert"/>
+                            <input type="hidden" name="CtfUser.Id" value="@User.Id" />
+                            <div class="mb-3">
+                                <label for="displayname" class="form-label">Display Name</label>
+                                <InputText id="displayname" @bind-Value="User.DisplayName" class="form-control" />
+                                <ValidationMessage For="() => User.DisplayName" class="text-danger" />
+                            </div>
+                    
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-secondary me-2" @onclick="CancelEdit">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+            <div class=" col-md-7">
+                <h3 class="mt-4">Completed Flags</h3>
+                <QuickGrid Class="table" Items="_user.Submissions.AsQueryable()">
+                    <PropertyColumn Property="@(flag => flag.Flag.Challenge.Title + (flag.Flag.Challenge.Flags.Count > 1 ? " - " + flag.Flag.Name : "" ))" Title="Flag" />
+                    <PropertyColumn Property="flag => TimeProvider.ToLocalDateTime(flag.DateSubmitted)" Format="dd/MM/yyyy" Title="Date Solved" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+                    <PropertyColumn Property="flag => flag.Flag.Points" Title="Points Earned" />
+                </QuickGrid>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [SupplyParameterFromForm]
+    private CtfUser? User { get; set; }
+
+    private BlazorCtfPlatformContext? _context;
+    private CtfUser? _user;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+
+            if (AuthenticationState is not null)
+            {
+                var state = await AuthenticationState;
+                _user = _context.GetOrCreateUser(state.User);
+                if (_user == null)
+                    NavigationManager.NavigateTo("notfound");
+            }
+            
+            StateHasChanged();
+        }
+    }
+
+    private void EditUser()
+    {
+        User = new CtfUser()
+        {
+            Id = _user!.Id,
+            AuthId = _user.AuthId,
+            DisplayName = _user.DisplayName
+        };
+        StateHasChanged();
+    }
+
+    private void CancelEdit()
+    {
+        User = null;
+        StateHasChanged();
+    }
+
+    private async Task UpdateUserName()
+    {
+        if (User == null)
+            return;
+        
+        _user!.DisplayName = string.IsNullOrWhiteSpace(User.DisplayName) ? null : User.DisplayName;
+        await _context!.SaveChangesAsync();
+        User = null;
+        StateHasChanged();
+    }
+
+    private async Task ClearDisplayName()
+    {
+        _user!.DisplayName = null;
+        await _context!.SaveChangesAsync();
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+}

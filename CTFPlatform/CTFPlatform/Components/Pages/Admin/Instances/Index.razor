@@ -1,0 +1,57 @@
+@page "/admin/instances"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@using CTFPlatform.Utilities
+@implements IAsyncDisposable
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject TimeProvider TimeProvider
+@inject IInstanceManager InstanceManager
+
+<PageTitle>Instances</PageTitle>
+
+<h2>Instances</h2>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <div>
+        <QuickGrid Class="table" @ref="_table" Items="_context.ChallengeInstances">
+            <PropertyColumn Property="instance => instance.User.DisplayName ?? instance.User.Email" Title="User" />
+            <PropertyColumn Property="instance => instance.Challenge.Title" Title="Challenge" />
+            <PropertyColumn Property="@(instance => TimeProvider.ToLocalDateTime(instance.InstanceExpiry).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
+            <PropertyColumn Property="instance => instance.Host" Title="Host" />
+            <TemplateColumn Context="instance">
+                <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instance)">Kill Instance</button>
+            </TemplateColumn>
+        </QuickGrid>
+    </div>
+}
+
+@code {
+    private BlazorCtfPlatformContext? _context;
+    private QuickGrid<ChallengeInstance> _table;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+
+    private async Task KillInstance(ChallengeInstance instance)
+    {
+        await InstanceManager.KillChallengeInstance(instance);
+        await _table.RefreshDataAsync();
+    }
+
+}

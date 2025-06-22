@@ -1,0 +1,37 @@
+<!-- BlazorIntAuto/Components/Login.razor -->
+
+<AuthorizeView>
+    <Authorized>        
+        <a href="Account/Logout">Log out</a>
+        
+        @if (_isLoggedIn)
+        {
+            <a href="Account">Profile</a>
+        }
+        else
+        {
+            <a href="Unlock">Activate</a>
+        }
+        
+    </Authorized>
+    <NotAuthorized>
+        <a href="Account/Login">Log in</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private bool _isLoggedIn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationState is not null)
+        {
+            var state = await AuthenticationState;
+
+            _isLoggedIn = state.User.IsInRole(CtfUser.UserRole);
+        }
+    }
+}

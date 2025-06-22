@@ -1,0 +1,91 @@
+@page "/admin/challenges/{Id:int}/details"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Challenge Details</PageTitle>
+
+<div>
+    <h2>Challenge Details</h2>
+    <hr />
+    @if (_challenge is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Title</dt>
+            <dd class="col-sm-10">@_challenge.Title</dd>
+            <dt class="col-sm-2">Hidden</dt>
+            <dd class="col-sm-10">@(_challenge.Hidden ? "Yes" : "No")</dd>
+            <dt class="col-sm-2">Category</dt>
+            <dd class="col-sm-10">@_challenge.Category</dd>
+            <dt class="col-sm-2">Description</dt>
+            <dd class="col-sm-10">@_challenge.Description</dd>
+            @if (_challenge.Flags.Count == 1)
+            {
+                <dt class="col-sm-2">Flag</dt>
+                <dd class="col-sm-10">@_challenge.Flags[0].Flag</dd>
+                <dt class="col-sm-2">Points</dt>
+                <dd class="col-sm-10">@_challenge.Flags[0].Points</dd>
+            }
+            else
+            {
+                <dt class="col-sm-2">Flags</dt>
+                <dd class="col-sm-10"></dd>
+                foreach (var flag in _challenge.Flags)
+                {
+                    <dt class="col-sm-2">Flag Name</dt>
+                    <dd class="col-sm-10">@flag.Name</dd>
+                    <dt class="col-sm-2">Flag</dt>
+                    <dd class="col-sm-10">@flag.Flag</dd>
+                    <dt class="col-sm-2">Points</dt>
+                    <dd class="col-sm-10">@flag.Points</dd>
+                }
+            }
+            @if (_challenge.Files.Any())
+            {
+                <dt class="col-sm-2">Files</dt>
+                <dd class="col-sm-10">
+                    @foreach (var file in _challenge.Files)
+                    {
+                        <div><a href="@($"files/{file.Id}")" download="@file.Name" target="_top">@file.Name</a></div>
+                    }
+                </dd>
+            }
+        </dl>
+        <div>
+            <a href="@($"/admin/challenges/{_challenge.Id}/edit")">Edit</a> |
+            <a href="@($"/admin/challenges")">Back to List</a>
+        </div>
+    }
+</div>
+
+@code {
+    private Challenge? _challenge;
+
+    [Parameter]
+    public int Id { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            _challenge = await context.Challenges
+                .Include(t => t.Flags)
+                .Include(t => t.Files)
+                .FirstOrDefaultAsync(m => m.Id == Id);
+
+            if (_challenge is null)
+                NavigationManager.NavigateTo("notfound");
+            
+            StateHasChanged();
+        }
+    }
+
+}

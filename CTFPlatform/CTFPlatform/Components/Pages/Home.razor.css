@@ -1,0 +1,13 @@
+::deep .table {
+    max-width: 800px;
+}
+
+::deep .table img {
+    max-width: 35px;
+    max-height: 35px;
+    padding: 5px;
+}
+
+::deep .table td {
+    vertical-align: middle; 
+}

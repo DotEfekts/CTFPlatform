@@ -1,0 +1,45 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@attribute [StreamRendering]
+
+@implements IAsyncDisposable
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+
+<PageTitle>Leaderboard</PageTitle>
+
+<h2>Scoreboard</h2>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <div class="d-flex justify-content-center">
+        <QuickGrid Class="table" Items="_context.Users">
+            <TemplateColumn Context="user">
+                <img src="@user.Avatar" alt="@($"Profile image for {user.DisplayName ?? user.Email}")" />
+            </TemplateColumn>
+            <PropertyColumn Property="user => user.DisplayName ?? user.Email" Title="User" />
+            <PropertyColumn Property="user => user.Submissions.Count" Title="Flags Solved"/>
+            <PropertyColumn Property="user => user.Submissions.Sum(f => f.Flag.Points)" Title="Points Earned" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+        </QuickGrid>
+    </div>
+}
+
+@code {
+    private BlazorCtfPlatformContext? _context;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+}

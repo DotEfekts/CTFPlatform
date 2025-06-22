@@ -1,0 +1,105 @@
+@page "/challenges"
+@using System.Text.RegularExpressions
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.UserRole)]
+@attribute [StreamRendering]
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+
+<InitializeTimeZone />
+
+<PageTitle>Challenges</PageTitle>
+
+<h3 class="mb-2">Challenges</h3>
+<hr class="mt-2 mb-3" />
+
+@if (_challenges == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    @foreach (var challengeGroup in _challenges.GroupBy(t => t.Category))
+    {
+        <h4>@challengeGroup.Key</h4>
+        <div class="challenge-grid d-flex flex-wrap">
+            @foreach (var challenge in challengeGroup)
+            {
+                var solved = challenge.Flags.All(f => _solvedFlags.Contains(f.Id));
+                var partiallySolved = challenge.Flags.Any(f => _solvedFlags.Contains(f.Id));
+                <div class="card challenge-card @(solved ? "alert-success" : partiallySolved ? "alert-info" : "alert-secondary")" @onclick="() => OpenChallenge(challenge)">
+                    <div class="card-body">
+                        <h5 class="card-title">@challenge.Title</h5>
+                        <div class="challenge-points mb-1">@challenge.Flags.Sum(t => t.Points) Points@(solved ? " - Solved" : partiallySolved ? " - Partially Solved" : "")</div>
+                        <pre><p class="challenge-description">@StripHtml(challenge.Description)</p></pre>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@if (_selectedChallenge != null)
+{
+    <ChallengeDialog Challenge="_selectedChallenge" 
+                     FlagsCompleted="_solvedFlags" 
+                     User="_user"
+                     FlagCompleted="FlagCompleted"
+                     DialogClosed="CloseChallenge" />
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
+    private ICollection<Challenge>? _challenges;
+    private int[] _solvedFlags = [];
+    private CtfUser? _user;
+    private Challenge? _selectedChallenge;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+        
+            if (AuthenticationState is not null)
+            {
+                var state = await AuthenticationState;
+                _user = context.GetOrCreateUser(state.User);
+            }
+
+            _challenges = context.Challenges.Where(t => !t.Hidden)
+                .Include(challenge => challenge.Flags)
+                .Include(challenge => challenge.Files)
+                .ToList();
+            if (_user != null)
+                _solvedFlags = context.FlagSubmissions.Select(t => t.Flag.Id).ToArray();
+            
+            StateHasChanged();
+        }
+    }
+
+    private void OpenChallenge(Challenge challenge)
+    {
+        _selectedChallenge = challenge;
+        StateHasChanged();
+    }
+
+    private void CloseChallenge()
+    {
+        _selectedChallenge = null;
+        StateHasChanged();
+    }
+
+    private void FlagCompleted(int flagId)
+    {
+        _solvedFlags = _solvedFlags.Append(flagId).ToArray();
+        StateHasChanged();
+    }
+
+    private string StripHtml(string challengeDescription) =>
+        Regex.Replace(challengeDescription, "<.*?>", String.Empty);
+
+}

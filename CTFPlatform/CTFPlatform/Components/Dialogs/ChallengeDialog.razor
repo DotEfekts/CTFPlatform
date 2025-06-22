@@ -1,0 +1,341 @@
+@using System.Timers
+@using CTFPlatform.Utilities
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+
+@implements IDisposable
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject IInstanceManager InstanceManager
+@inject IJSRuntime JsRuntime
+@inject TimeProvider TimeProvider
+
+<div class="modal show fade" id="challenge-modal" tabindex="-1" role="dialog" style="display: block;">
+    @if (Challenge == null || User == null)
+    {
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Error</h5>
+                    <button type="button" class="close btn-close" data-dismiss="modal" aria-label="Close" @onclick="CloseDialog"></button>
+                </div>
+                <div class="modal-body">
+                    <p>An unknown error occurred.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div style="display: inline-block;">
+                        <h5 class="modal-title">@Challenge.Title</h5>
+                        <span class="modal-subtitle">@Challenge.Category - @Challenge.Flags.Sum(t => t.Points) Points</span>
+                    </div>
+                    <button type="button" class="close btn-close" data-dismiss="modal" aria-label="Close" @onclick="CloseDialog"></button>
+                </div>
+                <div class="modal-body">
+                    @if (Challenge.Flags.Count > 1)
+                    {
+                        <div class="challenge-flags alert alert-info" role="alert">
+                            You have found <b>@Challenge.Flags.Count(f => FlagsCompleted?.Contains(f.Id) == true)/@Challenge.Flags.Count</b> flags for this challenge and earned <b>@Challenge.Flags.Where(f => FlagsCompleted?.Contains(f.Id) == true).Sum(f => f.Points)/@Challenge.Flags.Sum(t => t.Points)</b> points.
+                        </div>
+                    }
+                    else if (Challenge.Flags.All(f => FlagsCompleted?.Contains(f.Id) == true))
+                    {
+                        <div class="challenge-flags alert alert-success" role="alert">
+                            You have solved this challenge and earned <b>@Challenge.Flags.Sum(t => t.Points)</b> points.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="challenge-flags alert alert-secondary" role="alert">
+                            You have not solved this challenge yet.
+                        </div>
+                    }
+                    <p class="challenge-description">
+                        <pre>@((MarkupString)Challenge.Description)</pre>
+                    </p>
+                    @if (Challenge.Files.Any())
+                    {
+                        <div class="challenge-files">
+                            @GetFileLinks()
+                        </div>
+                    }
+                    @if (Challenge is InstanceChallenge instanceChallenge && !_checkingInstance)
+                    {
+                        <div class="mt-2">
+                            @if (_instanceError)
+                            {
+                                    <div class="challenge-flags alert alert-danger" role="alert">
+                                        @if (_challengeInstance != null)
+                                        {
+                                            @:An error occurred while attempting to destroy the instance.
+                                        }
+                                        else
+                                        {
+                                            @:An error occurred while attempting to start the instance.
+                                        }
+                                    </div>
+                            }
+                            @if (_challengeInstance != null && instanceChallenge.ExpiryTime.HasValue)
+                            {
+                                <span>Instance expires at @(TimeProvider.ToLocalDateTime(_challengeInstance.InstanceExpiry).ToString("dd/MM/yyyy h:mm:ss tt"))</span>
+                            }
+                            <div class="challenge-instance d-flex align-content-center mt-1">
+                                <input name="instance-details" type="text" value="@GetInstanceText()" readonly class="form-control"/>
+                                @if (_challengeInstance == null)
+                                {
+                                    <button type="button" id="start-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_instancePending" @onclick="StartInstance">Start Instance</button>
+                                }
+                                else
+                                {
+                                    <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_instancePending" @onclick="KillInstance">Kill Instance</button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <div class="d-flex flex-column flex-grow-1">
+                        @if (!string.IsNullOrWhiteSpace(_alertContent))
+                        {
+                            <div class="alert @_alertType alert-dismissible fade show" role="alert">
+                                @_alertContent
+                                <button type="button" class="close btn-close" data-dismiss="alert" aria-label="Close" @onclick="CloseAlert"></button>
+                            </div>
+                        }
+                        <div class="d-flex align-content-center my-2">
+                            <InputText id="flag" @bind-Value="_flagInput" disabled="@_submitting" class="form-control" @onkeypress="FlagSubmitted" />
+                            <button type="button" id="flag-submission" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_submitting" @onclick="SubmitFlag">Submit Flag</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Challenge? Challenge { get; set; }
+    
+    [Parameter]
+    public int[]? FlagsCompleted { get; set; }
+    
+    [Parameter]
+    public CtfUser? User { get; set; }
+    
+    [Parameter] 
+    public EventCallback<int> FlagCompleted { get; set; }
+    
+    [Parameter] 
+    public EventCallback DialogClosed { get; set; }
+
+    private bool _checkingInstance = true;
+    private bool _instancePending;
+    private bool _instanceError;
+    private ChallengeInstance? _challengeInstance;
+
+    private string _flagInput = "";
+    private bool _submitting;
+
+    private string _alertContent = "";
+    private string _alertType = "";
+
+    private Timer? _timer;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JsRuntime.InvokeVoidAsync("registerClickTrigger", DotNetObjectReference.Create(this), "CloseDialog", "challenge-modal");
+            if (Challenge is InstanceChallenge instanceChallenge && User != null)
+            {
+                _challengeInstance = await InstanceManager.CheckChallengeInstance(instanceChallenge, User);
+                _checkingInstance = false;
+                if (_challengeInstance is { Host: "" or null })
+                {
+                    _challengeInstance = null;
+                    _instancePending = true;
+                    _timer = new Timer()
+                    {
+                        AutoReset = false,
+                        Interval = 5 * 1000,
+                    };
+                    _timer.Elapsed += CheckInstance;
+                    _timer.Start();
+
+                }
+                
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async void CheckInstance(object? obj, ElapsedEventArgs args)
+    {
+        try
+        {
+            _challengeInstance = await InstanceManager.CheckChallengeInstance((Challenge as InstanceChallenge)!, User!);
+            if (_challengeInstance is { Host: "" or null })
+            {
+                _challengeInstance = null;
+                _timer!.Start();
+            }
+            else
+            {
+                _instancePending = false;
+                await InvokeAsync(StateHasChanged);
+            }
+            
+        }
+        catch
+        {
+            _challengeInstance = null;
+            _timer!.Start();
+        }
+    }
+
+    [JSInvokable]
+    public void CloseDialog()
+    {
+        DialogClosed.InvokeAsync();
+    }
+
+    private async Task SubmitFlag()
+    {
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            if (Challenge == null || User == null)
+            {
+                _alertContent = "An unknown error occurred.";
+                _alertType = "alert-danger";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_flagInput))
+            {
+                _alertContent = "Please enter a flag to check.";
+                _alertType = "alert-danger";
+                return;
+            }
+
+            var flag = Challenge.Flags.FirstOrDefault(f => f.Flag == _flagInput);
+            if (flag != null)
+            {
+                if (FlagsCompleted?.Contains(flag.Id) == true)
+                {
+                    _alertContent = "You have solved this flag, again!";
+                    _alertType = "alert-success";
+                    return;
+                }
+
+                await using var context = await DbFactory.CreateDbContextAsync();
+                
+                var challenge = context.Challenges.Include(challenge => challenge.Flags).FirstOrDefault(t => t.Id == Challenge.Id);
+                if (challenge == null || challenge.Hidden)
+                {
+                    Challenge = null;
+                    return;
+                }
+
+                flag = challenge.Flags.FirstOrDefault(t => t.Id == flag.Id);
+                if (flag == null)
+                {
+                    Challenge = null;
+                    return;
+                }
+                
+                context.Attach(User).State = EntityState.Unchanged;
+                context.FlagSubmissions.Add(new FlagSubmission
+                {
+                    Flag = flag,
+                    User = User,
+                    DateSubmitted = DateTime.UtcNow
+                });
+                await context.SaveChangesAsync();
+                await FlagCompleted.InvokeAsync(flag.Id);
+
+                _alertContent = $"You have solved this flag and earned {flag.Points} points!";
+                _alertType = "alert-success";
+            }
+            else
+            {
+                _alertContent = "This flag is incorrect, please try again.";
+                _alertType = "alert-danger";
+            }
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseAlert()
+    {
+        _alertContent = "";
+        StateHasChanged();
+    }
+
+    private async Task FlagSubmitted(KeyboardEventArgs e)
+    {
+        if (e.Code is "Enter" or "NumpadEnter")
+            await SubmitFlag();
+    }
+
+    private MarkupString GetFileLinks()
+    {
+        return (MarkupString)string.Join(", ", Challenge?.Files.Select(f => $"<span class=\"challenge-file\"><a href=\"files/{f.Id}\" download=\"{f.Name}\" target=\"_top\">{f.Name}</a></span>") ?? []);
+    }
+
+    private async Task StartInstance()
+    {
+        _instancePending = true;
+        StateHasChanged();
+        
+        _challengeInstance = await InstanceManager.GetOrDeployChallengeInstance((Challenge as InstanceChallenge)!, User!);
+        if (_challengeInstance == null)
+            _instanceError = true;
+        else
+            _instancePending = false;
+        
+        StateHasChanged();
+    }
+
+    private async Task KillInstance()
+    {
+        _instancePending = true;
+        StateHasChanged();
+
+        if (!await InstanceManager.KillChallengeInstance(_challengeInstance!))
+        {
+            _instanceError = true;
+        }
+        else
+        {
+            _challengeInstance = null;
+            _instancePending = false;
+        }
+        
+        StateHasChanged();
+    }
+
+    private string GetInstanceText()
+    {
+        if(_challengeInstance != null) 
+            return _instancePending ? "Killing instance, please wait." : _challengeInstance.Host;
+        return _instancePending ? "Starting instance, please wait." : "Start instance to show connection details.";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

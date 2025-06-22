@@ -1,0 +1,54 @@
+@implements IAsyncDisposable
+
+@page "/admin/challenges"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+
+<PageTitle>Challenges</PageTitle>
+
+<h2>Challenges</h2>
+
+<p>
+    <a href="admin/challenges/new">Create New</a>
+</p>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <QuickGrid Class="table" Items="_context.Challenges">
+        <PropertyColumn Property="challenge => challenge.Title" Sortable="true" />
+        <PropertyColumn Property="@(challenge => challenge.Hidden ? "Yes" : "No")" Title="Hidden" Sortable="true" />
+        <PropertyColumn Property="challenge => challenge.Category" Sortable="true" />
+        @* <PropertyColumn Property="challenge => challenge.Flag" /> *@
+        <PropertyColumn Property="challenge => challenge.Flags.Sum(t => t.Points)" Title="Points" Sortable="true" />
+        <PropertyColumn Property="challenge => challenge.Files.Count" Title="Files" Sortable="true" />
+
+        <TemplateColumn Context="challenge">
+            <a href="@($"admin/challenges/{challenge.Id}/edit")">Edit</a> |
+            <a href="@($"admin/challenges/{challenge.Id}/details")">Details</a> |
+            <a href="@($"admin/challenges/{challenge.Id}/delete")">Delete</a>
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@code {
+    private BlazorCtfPlatformContext? _context;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+}

@@ -1,0 +1,145 @@
+@using System.Configuration
+@using System.Security.Claims
+@using Auth0.ManagementApi
+@using Auth0.ManagementApi.Models
+@using System.Timers
+@using CTFPlatform.Utilities
+
+@page "/unlock"
+@rendermode InteractiveServer
+@implements IDisposable
+
+@attribute [Authorize]
+@attribute [StreamRendering]
+
+@inject IConfiguration Config
+@inject NavigationManager NavigationManager
+@inject Auth0ManagementTokenProvider TokenProvider
+
+<PageTitle>Activate</PageTitle>
+
+@if (_authId == null)
+{
+    <div class="challenge-flags alert alert-danger" role="alert">
+        An unknown error has occurred.
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-center">
+        <div class="card col-md-5">
+            <div class="card-body">
+                <EditForm method="post" Model="Model" OnValidSubmit="SubmitCode" FormName="edit" Enhance>
+                    <DataAnnotationsValidator />
+                    <ValidationSummary Model="Model" role="alert"/>
+                    @if (_codeError != null)
+                    {   
+                        <div class="challenge-flags alert alert-danger" role="alert">
+                            @_codeError
+                        </div>
+                    }
+                    @if (_success)
+                    {   
+                        <div class="challenge-flags alert alert-success" role="alert">
+                            Successfully updated roles, you will be redirected to login. 
+                        </div>
+                    }
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Activation Code</label>
+                        <InputText id="code" @bind-Value="Model.Code" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => Model.Code" class="text-danger" />
+                    </div>
+                    
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary" disabled="@_submitting">Submit Code</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [SupplyParameterFromForm] 
+    private ActivationCode Model { get; set; } = new();
+
+    private string? _authId;
+
+    private string? _codeError;
+    private bool _submitting;
+    private bool _success;
+    
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationState is not null)
+        {
+            var state = await AuthenticationState;
+            _authId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+    }
+
+    private async Task SubmitCode()
+    {
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            if (Model.Code == Config["ActivationCode"])
+            {
+                var token = await TokenProvider.GetToken();
+                var client = new ManagementApiClient(token.Token, new Uri($"https://{Config["Auth0:Domain"]}/api/v2"));
+                await client.Users.AssignRolesAsync(_authId!, new AssignRolesRequest()
+                {
+                    Roles = [Config["Auth0:AccessRole"]]
+                });
+
+                var result = await client.Users.GetRolesAsync(_authId);
+                if (result.All(t => t.Name != CtfUser.UserRole))
+                    throw new ConfigurationErrorsException("Failed to set role for user.");
+
+                _success = true;
+                _codeError = null;
+                
+                _timer = new Timer
+                {
+                    AutoReset = false,
+                    Interval = 5 * 1000,
+                };
+                _timer.Elapsed += Redirect;
+                _timer.Start();
+            }
+            else
+            {
+                _codeError = "Invalid code provided.";
+                _submitting = false;
+            }
+
+            StateHasChanged();
+        }
+        catch
+        {
+            _codeError = "An unknown error occurred.";
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Redirect(object? obj, ElapsedEventArgs args)
+    {
+        NavigationManager.NavigateTo("Account/Logout?login=true");
+    }
+    
+    public void Dispose() => _timer?.Dispose();
+
+    private class ActivationCode
+    {
+        [Required]
+        public string Code { get; set; }
+    }
+}

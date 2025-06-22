@@ -1,0 +1,330 @@
+@page "/admin/challenges/new"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IConfiguration Config
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create Challenge</PageTitle>
+
+<h2>Create Challenge</h2>
+
+<div class="d-flex justify-content-center">
+    <div class="card col-md-5">
+        <div class="card-body">
+            <EditForm method="post" Model="Challenge" OnInvalidSubmit="() => ValidateFiles()" OnValidSubmit="AddChallenge" FormName="create" Enhance>
+                <ObjectGraphDataAnnotationsValidator />
+                <ValidationSummary Model="Challenge" class="text-danger" role="alert" />
+                <div class="mb-3">
+                    <label for="title" class="form-label">Title</label> 
+                    <InputText id="title" @bind-Value="Challenge.Title" class="form-control" disabled="@_submitting" /> 
+                    <ValidationMessage For="() => Challenge.Title" class="text-danger" /> 
+                </div>
+                <div class="mb-1">
+                    <label for="hidden" class="form-label">Hide Challenge</label>
+                    <InputCheckbox id="hidden" @bind-Value="Challenge.Hidden" class="form-check-input ms-2" disabled="@_submitting" />
+                </div>
+                <div class="mb-3">
+                    <label for="category" class="form-label">Category</label> 
+                    <InputText id="category" @bind-Value="Challenge.Category" class="form-control" disabled="@_submitting" /> 
+                    <ValidationMessage For="() => Challenge.Category" class="text-danger" /> 
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label> 
+                    <InputTextArea id="description" @bind-Value="Challenge.Description" rows="5" style="resize: none;" class="form-control" disabled="@_submitting" /> 
+                    <ValidationMessage For="() => Challenge.Description" class="text-danger" /> 
+                </div>
+                <div class="mb-1">
+                    <label for="instance" class="form-label">Has Instance</label>
+                    <input type="checkbox" id="instance" checked="@(Challenge is InstanceChallenge)" @onchange="UpdateInstanceValue" class="form-check-input ms-2" disabled="@_submitting" />
+                </div>
+                @if (Challenge is InstanceChallenge instanceChallenge)
+                {
+                    <div class="mb-3">
+                        <label for="manifest" class="form-label">Deployment Manifest</label>
+                        <InputText id="manifest" @bind-Value="instanceChallenge.DeploymentManifestPath" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => instanceChallenge.DeploymentManifestPath" class="text-danger" /> 
+                    </div>
+                    <div class="mb-3">
+                        <label for="host" class="form-label">Host Format</label>
+                        <InputText id="host" @bind-Value="instanceChallenge.HostFormat" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => instanceChallenge.HostFormat" class="text-danger" />
+                    </div>
+                    <div class="mb-1">
+                        <label for="shared" class="form-label">Is Shared</label>
+                        <InputCheckbox id="shared" @bind-Value="instanceChallenge.Shared" class="form-check-input ms-2" disabled="@_submitting" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="expiry" class="form-label">Expiry Time</label>
+                        <InputNumber id="expiry" @bind-Value="instanceChallenge.ExpiryTime" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => instanceChallenge.ExpiryTime" class="text-danger" />
+                    </div>
+                }
+                @if (Challenge.Flags.Count == 1)
+                {
+                    <div class="mb-3">
+                        <label for="flag" class="form-label">Flag</label>
+                        <InputText id="flag" @bind-Value="Challenge.Flags[0].Flag" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => Challenge.Flags[0].Flag" class="text-danger" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="points" class="form-label">Points</label>
+                        <InputNumber id="points" @bind-Value="Challenge.Flags[0].Points" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => Challenge.Flags[0].Points" class="text-danger" />
+                    </div>
+                }
+                else
+                {
+                    foreach (var pair in Challenge.Flags.Select((flag, i) => new { flag, i }))
+                    {
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="@($"flag-name-{pair.i}")" class="form-label">Flag Name</label>
+                                    <InputText id="@($"flag-name-{pair.i}")" @bind-Value="pair.flag.Name" class="form-control" disabled="@_submitting" />
+                                    <ValidationMessage For="() => pair.flag.Name" class="text-danger" />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="@($"flag-{pair.i}")" class="form-label">Flag</label>
+                                    <InputText id="@($"flag-{pair.i}")" @bind-Value="pair.flag.Flag" class="form-control" disabled="@_submitting" />
+                                    <ValidationMessage For="() => pair.flag.Flag" class="text-danger" />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="@($"points-{pair.i}")" class="form-label">Points</label>
+                                    <InputNumber id="@($"points-{pair.i}")" @bind-Value="pair.flag.Points" class="form-control" disabled="@_submitting" />
+                                    <ValidationMessage For="() => pair.flag.Points" class="text-danger" />
+                                </div>
+                                <div class="d-flex justify-content-end">
+                                    <button type="button" class="btn btn-danger" @onclick="() => RemoveFlag(pair.flag)" disabled="@_submitting">Remove Flag <span class="material-symbols-outlined" style="vertical-align: top">remove</span></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                <div class="d-flex justify-content-start mb-3">
+                    <button type="button" class="btn btn-primary" @onclick="AddFlag" disabled="@_submitting">Add Flag <span class="material-symbols-outlined" style="vertical-align: top">add</span></button>
+                </div>
+
+                @foreach (var pair in Challenge.Files.Select((file, i) => new { file, i }))
+                {
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="card mb-3">
+                                <div class="card-body d-flex align-items-center @(_newFiles.ContainsKey(pair.file) ? "justify-content-between" : "justify-content-center")"
+                                     style="position: relative; min-height: 100px;"
+                                     @ondragenter="() => _showDrop[pair.file] = true" 
+                                     @ondragleave="() => _showDrop[pair.file] = false" 
+                                     @ondragend="() => _showDrop[pair.file] = false">
+                                    <InputFile OnChange="e => HandleFileDrop(e, pair.file)"
+                                               class="position-absolute w-100 h-100 overflow-hidden"
+                                               style="@("cursor: pointer; opacity: 0; top: 0; left: 0; z-index: 2;" + (_newFiles.ContainsKey(pair.file)? " pointer-events: none;" : ""))" />
+                                    @if (_newFiles.TryGetValue(pair.file, out var file))
+                                    {
+                                        <span>@file.Name</span>
+                                        <button type="button" class="btn btn-danger" @onclick="() => CancelFile(pair.file)" disabled="@_submitting">Remove</button>
+                                    }
+                                    else
+                                    {
+                                        @if (_showDrop.TryGetValue(pair.file, out var drop) && drop)
+                                        {
+                                            <span>Drop file to queue for upload.</span>
+                                        }
+                                        else
+                                        {
+                                            <div>
+                                                <span>Please drag or <u>select</u> a file for upload.</span><br />
+                                                @if (_fileErrors.TryGetValue(pair.file, out var error))
+                                                {
+                                                    <span style="color: var(--bs-danger); font-size: 12px;">@error</span>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-danger" @onclick="() => RemoveFile(pair.file)" disabled="@_submitting">Remove File <span class="material-symbols-outlined" style="vertical-align: top">remove</span></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                }
+                <div class="d-flex justify-content-start mb-2">
+                    <button type="button" class="btn btn-primary" @onclick="AddFile" disabled="@_submitting">Add File <span class="material-symbols-outlined" style="vertical-align: top">add</span></button>
+                </div>
+                
+                <div class="d-flex justify-content-end">
+                    <a class="btn btn-secondary me-2" href="/admin/challenges" disabled="@_submitting">Cancel</a>
+                    <button type="submit" class="btn btn-primary" disabled="@_submitting">Create Challenge</button>
+                </div>
+            </EditForm>
+            <div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Challenge Challenge { get; set; } = new() { Flags = [new CtfFlag() { Name = "Default Flag" } ], Files = [] };
+
+    private readonly Dictionary<CtfFile, bool> _showDrop = new();
+    private readonly Dictionary<CtfFile, IBrowserFile> _newFiles = new();
+    private readonly Dictionary<CtfFile, string> _fileErrors = new();
+
+    private bool _submitting;
+
+    private async Task AddChallenge()
+    {
+        if (!ValidateFiles())
+            return;
+
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            if (Challenge.Flags.Count == 1)
+                Challenge.Flags[0].Name = "Default Flag";
+
+            await using var context = await DbFactory.CreateDbContextAsync();
+
+            foreach (var file in Challenge.Files.ToList())
+            {
+                if (!_newFiles.TryGetValue(file, out var browserFile))
+                {
+                    _fileErrors[file] = "Please select a file to upload.";
+                    return;
+                }
+
+                Guid fileName;
+                do fileName = Guid.NewGuid();
+                while (File.Exists(Config["UploadDirectory"] + Path.DirectorySeparatorChar + fileName));
+                
+                try
+                {
+                    file.Name = browserFile.Name;
+                    file.StorageLocation = fileName.ToString();
+
+                    await using var fileStream = File.Create(Config["UploadDirectory"] + Path.DirectorySeparatorChar + fileName);
+                    await using var readStream = browserFile.OpenReadStream(browserFile.Size);
+                    await readStream.CopyToAsync(fileStream);
+                }
+                catch
+                {
+                    if (File.Exists(Config["UploadDirectory"] + Path.DirectorySeparatorChar + fileName))
+                        File.Delete(Config["UploadDirectory"] + Path.DirectorySeparatorChar + fileName);
+
+                    _newFiles.Remove(file);
+                    _fileErrors[file] = "An unknown error occurred while uploading this file.";
+                    return;
+                }
+            }
+
+            context.Challenges.Add(Challenge);
+            await context.SaveChangesAsync();
+            NavigationManager.NavigateTo("/admin/challenges");
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void AddFlag()
+    {
+        if(Challenge.Flags is [{ Name: "Default Flag" }])
+            Challenge.Flags[0].Name = "";
+        
+        Challenge.Flags.Add(new CtfFlag());
+        StateHasChanged();
+    }
+
+    private void RemoveFlag(CtfFlag challengeFlag)
+    {
+        Challenge.Flags.Remove(challengeFlag);
+        
+        if(Challenge.Flags is [{ Name: null or "" }])
+            Challenge.Flags[0].Name = "Default Flag";
+        
+        StateHasChanged();
+    }
+
+    private void AddFile()
+    {
+        Challenge.Files.Add(new CtfFile());
+        StateHasChanged();
+    }
+
+    private bool ValidateFiles()
+    {
+        foreach (var file in Challenge.Files)
+            if (!_newFiles.ContainsKey(file))
+                _fileErrors[file] = "Please select a file to upload.";
+            else
+                _fileErrors.Remove(file);
+        
+        return !_fileErrors.Any();
+    }
+
+    private void HandleFileDrop(InputFileChangeEventArgs eventArgs, CtfFile challengeFile)
+    {
+        _showDrop[challengeFile] = false;
+        challengeFile.Name = eventArgs.File.Name;
+        _newFiles[challengeFile] = eventArgs.File;
+        StateHasChanged();
+    }
+
+    private void CancelFile(CtfFile challengeFile)
+    {
+        challengeFile.Name = "";
+        _newFiles.Remove(challengeFile);
+        StateHasChanged();
+    }
+
+    private void RemoveFile(CtfFile challengeFile)
+    {
+        Challenge.Files.Remove(challengeFile);
+        _newFiles.Remove(challengeFile);
+        _fileErrors.Remove(challengeFile);
+        _showDrop.Remove(challengeFile);
+        StateHasChanged();
+    }
+
+    private void UpdateInstanceValue(ChangeEventArgs args)
+    {
+        if ((bool)(args.Value ?? false))
+        {
+            if (Challenge is not InstanceChallenge)
+                Challenge = new InstanceChallenge()
+                {
+                    Title = Challenge.Title,
+                    Hidden = Challenge.Hidden,
+                    Category = Challenge.Category,
+                    Description = Challenge.Description,
+                    Flags = Challenge.Flags,
+                    Files = Challenge.Files
+                };
+        }
+        else
+        {
+            if (Challenge is InstanceChallenge)
+                Challenge = new Challenge
+                {
+                    Title = Challenge.Title,
+                    Hidden = Challenge.Hidden,
+                    Category = Challenge.Category,
+                    Description = Challenge.Description,
+                    Flags = Challenge.Flags,
+                    Files = Challenge.Files
+                };
+        }
+        
+        StateHasChanged();
+    }
+
+}
