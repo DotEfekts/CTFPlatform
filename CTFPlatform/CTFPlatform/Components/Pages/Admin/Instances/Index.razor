@@ -24,7 +24,7 @@ else
         <QuickGrid Class="table" @ref="_table" Items="_context.ChallengeInstances">
             <PropertyColumn Property="instance => instance.User.DisplayName ?? instance.User.Email" Title="User" />
             <PropertyColumn Property="instance => instance.Challenge.Title" Title="Challenge" />
-            <PropertyColumn Property="@(instance => TimeProvider.ToLocalDateTime(instance.InstanceExpiry).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
+            <PropertyColumn Property="@(instance => TimeProvider.ToLocalDateTime(instance.InstanceExpiry.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
             <PropertyColumn Property="instance => instance.Host" Title="Host" />
             <TemplateColumn Context="instance">
                 <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instance)">Kill Instance</button>

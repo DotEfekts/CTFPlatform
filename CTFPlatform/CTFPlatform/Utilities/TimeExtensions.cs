@@ -2,6 +2,13 @@ namespace CTFPlatform.Utilities;
 
 public static class TimeProviderExtensions
 {
+    public static DateTime TrySpecifyKind(this DateTime dateTime, DateTimeKind kind)
+    {
+        if (dateTime.Kind == DateTimeKind.Unspecified && kind != DateTimeKind.Unspecified)
+            return DateTime.SpecifyKind(dateTime, kind);
+        return dateTime;
+    }
+    
     public static DateTime ToLocalDateTime(this TimeProvider timeProvider, DateTime dateTime)
     {
         return dateTime.Kind switch

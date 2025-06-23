@@ -71,7 +71,7 @@
                 <h3 class="mt-4">Completed Flags</h3>
                 <QuickGrid Class="table" Items="_user.Submissions.AsQueryable()">
                     <PropertyColumn Property="@(flag => flag.Flag.Challenge.Title + (flag.Flag.Challenge.Flags.Count > 1 ? " - " + flag.Flag.Name : "" ))" Title="Flag" />
-                    <PropertyColumn Property="flag => TimeProvider.ToLocalDateTime(flag.DateSubmitted)" Format="dd/MM/yyyy" Title="Date Solved" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
+                    <PropertyColumn Property="flag => TimeProvider.ToLocalDateTime(flag.DateSubmitted.TrySpecifyKind(DateTimeKind.Utc))" Format="dd/MM/yyyy" Title="Date Solved" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
                     <PropertyColumn Property="flag => flag.Flag.Points" Title="Points Earned" />
                 </QuickGrid>
             </div>

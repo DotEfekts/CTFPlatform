@@ -85,7 +85,7 @@
                             }
                             @if (_challengeInstance != null && instanceChallenge.ExpiryTime.HasValue)
                             {
-                                <span>Instance expires at @(TimeProvider.ToLocalDateTime(_challengeInstance.InstanceExpiry).ToString("dd/MM/yyyy h:mm:ss tt"))</span>
+                                <span>Instance expires at @TimeProvider.ToLocalDateTime(_challengeInstance.InstanceExpiry.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt")</span>
                             }
                             <div class="challenge-instance d-flex align-content-center mt-1">
                                 <input name="instance-details" type="text" value="@GetInstanceText()" readonly class="form-control"/>
