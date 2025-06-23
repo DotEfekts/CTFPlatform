@@ -4,6 +4,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTFPlatform", "CTFPlatform\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CTFPlatform.Client", "CTFPlatform\CTFPlatform.Client\CTFPlatform.Client.csproj", "{DA090823-D96D-453B-B06C-B7C0542DFCD4}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{39C81877-1A2C-471D-9F1C-E89706DD0E31}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yaml = docker-compose.yaml
+		Dockerfile = Dockerfile
+		.dockerignore = .dockerignore
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
