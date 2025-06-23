@@ -8,7 +8,7 @@ USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS publish
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["CTFPlatform/CTFPlatform/CTFPlatform.csproj", "CTFPlatform/CTFPlatform/"]
@@ -16,10 +16,6 @@ COPY ["CTFPlatform/CTFPlatform.Client/CTFPlatform.Client.csproj", "CTFPlatform/C
 RUN dotnet restore "CTFPlatform/CTFPlatform/CTFPlatform.csproj"
 COPY . .
 WORKDIR "/src/CTFPlatform/CTFPlatform"
-RUN dotnet build "./CTFPlatform.csproj" -c $BUILD_CONFIGURATION -o /app/build
-
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./CTFPlatform.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM runbase AS final

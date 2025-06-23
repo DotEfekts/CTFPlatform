@@ -1,4 +1,5 @@
 using System.Configuration;
+using System.Net;
 using Auth0.AspNetCore.Authentication;
 using CTFPlatform.Components;
 using CTFPlatform.Models;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +65,24 @@ builder.Services.AddBrowserTimeProvider();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<Auth0ManagementTokenProvider>();
 
+if (builder.Configuration["ForwardNetwork"] != null || builder.Configuration["ForwardProxy"] != null)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = int.TryParse(builder.Configuration["ForwardLimit"], out var limit) ? limit : 2;
+        
+        if (builder.Configuration["ForwardNetwork"] != null)
+        {
+            var range = builder.Configuration["ForwardNetwork"]!.Split('/');
+            options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse(range[0]), int.Parse(range[1])));
+        }
+        
+        if(builder.Configuration["ForwardProxy"] != null)
+            options.KnownProxies.Add(IPAddress.Parse(builder.Configuration["ForwardProxy"]!));
+    });
+}
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
@@ -84,11 +104,7 @@ else
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
     app.UseMigrationsEndPoint();
-
-    app.UseForwardedHeaders(new ForwardedHeadersOptions
-    {
-        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-    });
+    app.UseForwardedHeaders();
 }
 
 app.UseHttpsRedirection();

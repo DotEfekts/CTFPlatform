@@ -28,13 +28,27 @@ public class TerraformCleanupManager(IServiceProvider services) : ICleanupManage
 
 public class InstanceRunnerException(string message, Exception innerException) : Exception(message, innerException);
 
-public class TerraformInstanceManager(
-    IConfiguration config,
-    IDbContextFactory<BlazorCtfPlatformContext> dbFactory) : IInstanceManager
+public class TerraformInstanceManager : IInstanceManager
 {
+    private readonly IDbContextFactory<BlazorCtfPlatformContext> _dbFactory;
+    private readonly string _manifestPath;
+    private readonly string _deploymentsPath;
+    public TerraformInstanceManager(
+        IConfiguration config,
+        IDbContextFactory<BlazorCtfPlatformContext> dbFactory)
+    {
+        _dbFactory = dbFactory;
+
+        _manifestPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar;
+        _deploymentsPath = _manifestPath + "deployments" + Path.DirectorySeparatorChar;
+
+        if (!Directory.Exists(_deploymentsPath))
+            Directory.CreateDirectory(_deploymentsPath);
+    }
+    
     public async Task<ChallengeInstance?> CheckChallengeInstance(InstanceChallenge challenge, CtfUser user)
     {
-        await using var context = await dbFactory.CreateDbContextAsync();
+        await using var context = await _dbFactory.CreateDbContextAsync();
         return context.ChallengeInstances.FirstOrDefault(t => t.User == user && t.Challenge == challenge);
     }
 
@@ -44,7 +58,7 @@ public class TerraformInstanceManager(
         if (instance != null)
             return instance;
 
-        await using var context = await dbFactory.CreateDbContextAsync();
+        await using var context = await _dbFactory.CreateDbContextAsync();
         if (challenge.Shared)
         {
             var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge == challenge);
@@ -65,7 +79,7 @@ public class TerraformInstanceManager(
         
         Guid directory;
         do directory = Guid.NewGuid();
-        while(Directory.Exists(config["ManifestDirectory"] + Path.DirectorySeparatorChar + "Deployments" + Path.DirectorySeparatorChar + directory));
+        while(Directory.Exists(_deploymentsPath + directory));
             
         context.Attach(challenge).State = EntityState.Unchanged;
         context.Attach(user).State = EntityState.Unchanged;
@@ -81,8 +95,8 @@ public class TerraformInstanceManager(
         context.ChallengeInstances.Add(instance);
         await context.SaveChangesAsync();
         
-        var manifestPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar + challenge.DeploymentManifestPath;
-        var deploymentPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar + "Deployments" + Path.DirectorySeparatorChar + directory;
+        var manifestPath = _manifestPath + challenge.DeploymentManifestPath;
+        var deploymentPath = _deploymentsPath + directory;
 
         Dictionary<string, string> outputs;
         try
@@ -102,7 +116,7 @@ public class TerraformInstanceManager(
 
     public async Task<bool> KillChallengeInstance(ChallengeInstance challengeInstance)
     {
-        await using var context = await dbFactory.CreateDbContextAsync();
+        await using var context = await _dbFactory.CreateDbContextAsync();
         
         var instance = context.ChallengeInstances
             .Include(i => i.Challenge)
@@ -121,7 +135,7 @@ public class TerraformInstanceManager(
         }
         
         var directory = challengeInstance.DeploymentPath;
-        var deploymentPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar + "Deployments" + Path.DirectorySeparatorChar + directory;
+        var deploymentPath = _deploymentsPath + directory;
         if (Directory.Exists(deploymentPath))
         {
             try
@@ -143,12 +157,12 @@ public class TerraformInstanceManager(
 
     public async Task Clean()
     {
-        await using var context = await dbFactory.CreateDbContextAsync();
+        await using var context = await _dbFactory.CreateDbContextAsync();
         var expiredInstances = context.ChallengeInstances.Where(t => t.InstanceExpiry <= DateTime.UtcNow).ToList();
         foreach (var instance in expiredInstances)
             await KillChallengeInstance(instance);
 
-        var deploymentBasePath = new DirectoryInfo(config["ManifestDirectory"] + Path.DirectorySeparatorChar + "Deployments");
+        var deploymentBasePath = new DirectoryInfo(_deploymentsPath);
         var instanceDeployments = context.ChallengeInstances.Select(t => t.DeploymentPath).Distinct().ToList();
         var deploymentFolders = Directory.GetDirectories(deploymentBasePath.FullName).Select(t => t.Replace(deploymentBasePath.FullName + Path.DirectorySeparatorChar, ""));
         var orphaned = deploymentFolders.Where(t => !instanceDeployments.Contains(t));
@@ -156,8 +170,7 @@ public class TerraformInstanceManager(
         {
             try
             {
-                var deploymentPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar + "Deployments" +
-                                     Path.DirectorySeparatorChar + orphan;
+                var deploymentPath = _deploymentsPath + orphan;
                 await KillDeployment(deploymentPath);
                 Directory.Delete(deploymentPath, true);
             }

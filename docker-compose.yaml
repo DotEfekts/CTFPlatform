@@ -1,6 +1,7 @@
 ﻿services:
   ctfplatform:
     build: .
-    ports:
-      - "8080:8080"
-
+    restart: unless-stopped
+    volumes:
+      - /appdata/ctfplatform/appsettings.json:/app/appsettings.json:ro
+      - /appdata/ctfplatform/data:/data
