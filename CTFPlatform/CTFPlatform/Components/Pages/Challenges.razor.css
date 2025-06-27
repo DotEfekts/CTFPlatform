@@ -1,3 +1,10 @@
+.card-body {
+    padding: 0;
+    margin: 1rem 1rem;
+    max-height: 100%;
+    overflow: hidden;
+}
+
 .challenge-card {
     margin: 20px;
     height: 150px;
