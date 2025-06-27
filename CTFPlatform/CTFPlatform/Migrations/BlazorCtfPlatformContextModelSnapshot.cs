@@ -228,7 +228,7 @@ namespace CTFPlatform.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("VpnCertificate");
+                    b.ToTable("VpnCertificates");
                 });
 
             modelBuilder.Entity("CTFPlatform.Models.InstanceChallenge", b =>

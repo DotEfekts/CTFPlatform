@@ -76,7 +76,8 @@ pre {
 }
 
 code {
-    color: #383d41;
+    color: crimson !important;
     background-color: #e2e3e555;
     padding: 2px;
+    border-radius: 4px;
 }

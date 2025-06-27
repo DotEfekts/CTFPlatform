@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CTFPlatform.Models;
 
+// CTFPlatform.Models.BlazorCtfPlatformContext, CTFPlatform, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 public class BlazorCtfPlatformContext(DbContextOptions<BlazorCtfPlatformContext> options) : DbContext(options)
 {
     public DbSet<Setting> Settings { get; set; }
