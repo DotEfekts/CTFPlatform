@@ -30,10 +30,12 @@ else
                 var solved = challenge.Flags.All(f => _solvedFlags.Contains(f.Id));
                 var partiallySolved = challenge.Flags.Any(f => _solvedFlags.Contains(f.Id));
                 <div class="card challenge-card @(solved ? "alert-success" : partiallySolved ? "alert-info" : "alert-secondary")" @onclick="() => OpenChallenge(challenge)">
-                    <div class="card-body">
-                        <h5 class="card-title">@challenge.Title</h5>
-                        <div class="challenge-points mb-1">@challenge.Flags.Sum(t => t.Points) Points@(solved ? " - Solved" : partiallySolved ? " - Partially Solved" : "")</div>
-                        <pre><p class="challenge-description">@StripHtml(challenge.Description)</p></pre>
+                    <div class="card-body" style="max-height: 100%">
+                        <div class="overflow-hidden" style="max-height: 100%">
+                            <h5 class="card-title">@challenge.Title</h5>
+                            <div class="challenge-points mb-1">@challenge.Flags.Sum(t => t.Points) Points@(solved ? " - Solved" : partiallySolved ? " - Partially Solved" : "")</div>
+                            <pre><p class="challenge-description">@StripHtml(challenge.Description)</p></pre>
+                        </div>
                     </div>
                 </div>
             }
