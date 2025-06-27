@@ -31,6 +31,10 @@
             <dd class="col-sm-10">@(_user.DisplayName ?? "Not Set")</dd>
         </dl>
         <dl class="row">
+            <dt class="col-sm-2">User Locked</dt>
+            <dd class="col-sm-10">@(_user.Locked ? "Yes" : "No")</dd>
+        </dl>
+        <dl class="row">
             <dt class="col-sm-2">Score</dt>
             <dd class="col-sm-10">@_user.Submissions.Count Flags - @_user.Submissions.Sum(t => t.Flag.Points) Points</dd>
         </dl>
@@ -68,6 +72,6 @@
         await using var context = await DbFactory.CreateDbContextAsync();
         context.Users.Remove(_user!);
         await context.SaveChangesAsync();
-        NavigationManager.NavigateTo("/admin/users");
+        NavigationManager.NavigateTo("admin/users");
     }
 }

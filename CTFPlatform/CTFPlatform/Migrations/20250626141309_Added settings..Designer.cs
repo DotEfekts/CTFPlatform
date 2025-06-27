@@ -3,6 +3,7 @@ using System;
 using CTFPlatform.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CTFPlatform.Migrations
 {
     [DbContext(typeof(BlazorCtfPlatformContext))]
-    partial class BlazorCtfPlatformContextModelSnapshot : ModelSnapshot
+    [Migration("20250626141309_Added settings.")]
+    partial class Addedsettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -159,9 +162,6 @@ namespace CTFPlatform.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("Locked")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
                     b.ToTable("Users");
@@ -203,32 +203,6 @@ namespace CTFPlatform.Migrations
                     b.HasKey("Key");
 
                     b.ToTable("Settings");
-                });
-
-            modelBuilder.Entity("CTFPlatform.Models.VpnCertificate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Certificate")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("Expiry")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("Valid")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("VpnCertificate");
                 });
 
             modelBuilder.Entity("CTFPlatform.Models.InstanceChallenge", b =>
@@ -312,17 +286,6 @@ namespace CTFPlatform.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("CTFPlatform.Models.VpnCertificate", b =>
-                {
-                    b.HasOne("CTFPlatform.Models.CtfUser", "User")
-                        .WithMany("Certificates")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("CTFPlatform.Models.Challenge", b =>
                 {
                     b.Navigation("Files");
@@ -337,8 +300,6 @@ namespace CTFPlatform.Migrations
 
             modelBuilder.Entity("CTFPlatform.Models.CtfUser", b =>
                 {
-                    b.Navigation("Certificates");
-
                     b.Navigation("Instances");
 
                     b.Navigation("Submissions");

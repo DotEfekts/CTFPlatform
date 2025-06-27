@@ -7,6 +7,10 @@ a, .btn-link {
     color: #006bb7;
 }
 
+.children-no-wrap > * {
+    white-space: nowrap;
+}
+
 .btn-primary {
     color: #fff;
     background-color: #1b6ec2;

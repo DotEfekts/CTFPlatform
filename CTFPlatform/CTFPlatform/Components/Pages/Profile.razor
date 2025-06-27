@@ -9,6 +9,7 @@
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
 @inject TimeProvider TimeProvider
+@inject IVpnCertificateManager CertificateManager
 
 <PageTitle>Profile</PageTitle>
 
@@ -39,7 +40,12 @@
                     </div>
                     @if (User == null)
                     {
-                        <div class="d-flex justify-content-end">
+                        <div class="d-flex children-no-wrap">
+                            @if (_vpnAvailable)
+                            {
+                                <a href="certificates/vpnprofile" class="btn btn-primary" download="client.pem">Download VPN Profile</a>
+                            }
+                            <div style="width: 100%;"></div>
                             @if (!string.IsNullOrWhiteSpace(_user.DisplayName))
                             {
                                 <button type="button" class="btn btn-danger me-2" @onclick="ClearDisplayName">Clear Display Name</button>
@@ -80,29 +86,32 @@
 </div>
 
 @code {
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthenticationState { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
 
-    [SupplyParameterFromForm]
-    private CtfUser? User { get; set; }
+    [SupplyParameterFromForm] private CtfUser? User { get; set; }
 
     private BlazorCtfPlatformContext? _context;
     private CtfUser? _user;
+
+    private bool _vpnAvailable;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            _vpnAvailable = await CertificateManager.CheckVpnAvailableAsync();
+            
             _context = await DbFactory.CreateDbContextAsync();
 
             if (AuthenticationState is not null)
             {
                 var state = await AuthenticationState;
                 _user = _context.GetOrCreateUser(state.User);
-                if (_user == null)
-                    NavigationManager.NavigateTo("notfound");
             }
             
+            if(_user == null || _user.Locked)
+                NavigationManager.NavigateTo("lockout");
+
             StateHasChanged();
         }
     }
@@ -128,7 +137,7 @@
     {
         if (User == null)
             return;
-        
+
         _user!.DisplayName = string.IsNullOrWhiteSpace(User.DisplayName) ? null : User.DisplayName;
         await _context!.SaveChangesAsync();
         User = null;

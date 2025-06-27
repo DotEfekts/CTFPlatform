@@ -28,6 +28,10 @@ else
                         <InputText id="displayname" @bind-Value="CtfUser.DisplayName" class="form-control" />
                         <ValidationMessage For="() => CtfUser.DisplayName" class="text-danger" />
                     </div>
+                    <div class="mb-1">
+                        <label for="locked" class="form-label">User Locked</label>
+                        <InputCheckbox id="locked" @bind-Value="CtfUser.Locked" class="form-check-input ms-2" />
+                    </div>
                     
                     <div class="d-flex justify-content-end">
                         <a class="btn btn-secondary me-2" href="/admin/users">Cancel</a>
@@ -80,7 +84,7 @@ else
                 throw;
         }
 
-        NavigationManager.NavigateTo("/ctfusers");
+        NavigationManager.NavigateTo("admin/users");
     }
 
     private bool CtfUserExists(int id)

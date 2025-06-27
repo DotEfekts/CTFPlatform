@@ -3,6 +3,7 @@ using System.Net;
 using Auth0.AspNetCore.Authentication;
 using CTFPlatform.Components;
 using CTFPlatform.Models;
+using CTFPlatform.Models.Settings;
 using CTFPlatform.Utilities;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication;
@@ -21,6 +22,11 @@ builder.Services.AddDbContextFactory<BlazorCtfPlatformContext>(options =>
             builder.Configuration.GetConnectionString("BlazorCtfPlatformContext") ?? 
             throw new InvalidOperationException(
                 "Connection string 'BlazorCtfPlatformContext' not found.")));
+
+builder.Services.AddSingleton<IStoredSettingsManager<ApplicationSettings>, DbContextStoredSettingsManager<ApplicationSettings>>();
+
+builder.Services.AddSingleton<IStoredSettingsManager<VpnInfo>, DbContextStoredSettingsManager<VpnInfo>>();
+builder.Services.AddSingleton<IVpnCertificateManager, AppVpnCertificateManager>();
 
 if (!Directory.Exists(builder.Configuration["UploadDirectory"]))
     throw new ConfigurationErrorsException("Invalid upload storage directory.");

@@ -226,7 +226,7 @@
 
             context.Challenges.Add(Challenge);
             await context.SaveChangesAsync();
-            NavigationManager.NavigateTo("/admin/challenges");
+            NavigationManager.NavigateTo("admin/challenges");
         }
         finally
         {

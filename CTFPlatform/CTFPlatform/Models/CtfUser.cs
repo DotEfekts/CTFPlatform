@@ -11,8 +11,11 @@ public class CtfUser
     public string Email { get; set; } = "unset";
     public string? Avatar { get; set; }
     public string? DisplayName { get; set; }
+    public bool Locked { get; set; }
+    
     public virtual List<FlagSubmission> Submissions { get; set; }
     public virtual List<ChallengeInstance> Instances { get; set; }
+    public virtual List<VpnCertificate> Certificates { get; set; }
     
     public const string AdminRole = "CTF Admin";
     public const string UserRole = "CTF User";

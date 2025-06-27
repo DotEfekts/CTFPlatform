@@ -20,6 +20,7 @@ else
     <QuickGrid Class="table" Items="_context.Users">
         <PropertyColumn Property="user => user.Email" Title="Email" />
         <PropertyColumn Property="@(user => string.IsNullOrWhiteSpace(user.DisplayName) ? "Not Set" : user.DisplayName)" Title="Display Name" />
+        <PropertyColumn Property="@(user => user.Locked ? "Yes" : "No")" Title="User Locked"/>
         <PropertyColumn Property="user => user.Submissions.Count" Title="Flags Solved"/>
         <PropertyColumn Property="user => user.Submissions.Sum(f => f.Flag.Points)" Title="Points Earned"/>
 

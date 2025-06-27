@@ -73,6 +73,6 @@
         context.Challenges.Remove(_challenge!);
             
         await context.SaveChangesAsync();
-        NavigationManager.NavigateTo("/admin/challenges");
+        NavigationManager.NavigateTo("admin/challenges");
     }
 }

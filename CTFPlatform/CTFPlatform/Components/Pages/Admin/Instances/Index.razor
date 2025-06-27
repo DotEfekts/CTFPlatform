@@ -21,13 +21,13 @@
 else
 {
     <div>
-        <QuickGrid Class="table" @ref="_table" Items="_context.ChallengeInstances">
-            <PropertyColumn Property="instance => instance.User.DisplayName ?? instance.User.Email" Title="User" />
-            <PropertyColumn Property="instance => instance.Challenge.Title" Title="Challenge" />
-            <PropertyColumn Property="@(instance => TimeProvider.ToLocalDateTime(instance.InstanceExpiry.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
-            <PropertyColumn Property="instance => instance.Host" Title="Host" />
-            <TemplateColumn Context="instance">
-                <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instance)">Kill Instance</button>
+        <QuickGrid Class="table" @ref="_table" Items="_context.ChallengeInstances.ToList().GroupBy(t => t.DeploymentPath).AsQueryable()">
+            <PropertyColumn Property="instances => instances.First().Challenge.Title" Title="Challenge" />
+            <PropertyColumn Property="@(instances => string.Join(", ", instances.Select(t => t.User.DisplayName ?? t.User.Email)))" Title="Users" />
+            <PropertyColumn Property="@(instances => TimeProvider.ToLocalDateTime(instances.Max(t => t.InstanceExpiry).TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
+            <PropertyColumn Property="instances => instances.First().Host" Title="Host" />
+            <TemplateColumn Context="instances">
+                <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instances)">Kill Instance</button>
             </TemplateColumn>
         </QuickGrid>
     </div>
@@ -35,7 +35,7 @@ else
 
 @code {
     private BlazorCtfPlatformContext? _context;
-    private QuickGrid<ChallengeInstance> _table;
+    private QuickGrid<IGrouping<string, ChallengeInstance>> _table;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -48,10 +48,15 @@ else
 
     public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
 
-    private async Task KillInstance(ChallengeInstance instance)
+    private async Task KillInstance(IGrouping<string, ChallengeInstance> instances)
     {
-        await InstanceManager.KillChallengeInstance(instance);
+        foreach(var instance in instances)
+            await InstanceManager.KillChallengeInstance(instance);
         await _table.RefreshDataAsync();
     }
 
+    private IQueryable<TGridItem>? GetQueryable<TGridItem>()
+    {
+        throw new NotImplementedException();
+    }
 }

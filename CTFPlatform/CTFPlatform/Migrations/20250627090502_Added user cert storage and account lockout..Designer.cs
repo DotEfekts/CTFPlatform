@@ -3,6 +3,7 @@ using System;
 using CTFPlatform.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CTFPlatform.Migrations
 {
     [DbContext(typeof(BlazorCtfPlatformContext))]
-    partial class BlazorCtfPlatformContextModelSnapshot : ModelSnapshot
+    [Migration("20250627090502_Added user cert storage and account lockout.")]
+    partial class Addedusercertstorageandaccountlockout
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

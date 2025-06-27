@@ -5,12 +5,14 @@ namespace CTFPlatform.Models;
 
 public class BlazorCtfPlatformContext(DbContextOptions<BlazorCtfPlatformContext> options) : DbContext(options)
 {
+    public DbSet<Setting> Settings { get; set; }
     public DbSet<Challenge> Challenges { get; set; }
     public DbSet<ChallengeInstance> ChallengeInstances { get; set; }
     public DbSet<CtfFile> Files { get; set; }
     public DbSet<CtfFlag> Flags { get; set; }
     public DbSet<FlagSubmission> FlagSubmissions { get; set; }
     public DbSet<CtfUser> Users { get; set; }
+    public DbSet<VpnCertificate> VpnCertificates { get; set; }
 
     public CtfUser? GetOrCreateUser(ClaimsPrincipal stateUser)
     {

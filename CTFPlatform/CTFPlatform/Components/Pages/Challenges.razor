@@ -6,6 +6,7 @@
 @attribute [StreamRendering]
 
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject NavigationManager NavigationManager
 
 <InitializeTimeZone />
 
@@ -68,6 +69,12 @@ else
             {
                 var state = await AuthenticationState;
                 _user = context.GetOrCreateUser(state.User);
+            }
+
+            if (_user == null || _user.Locked)
+            {
+                NavigationManager.NavigateTo("lockout");
+                return;
             }
 
             _challenges = context.Challenges.Where(t => !t.Hidden)

@@ -1,0 +1,160 @@
+@page "/admin/settings"
+@using CTFPlatform.Models.Settings
+@using CTFPlatform.Utilities
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@inject IVpnCertificateManager VpnCertificateManager
+@inject IStoredSettingsManager<ApplicationSettings> SettingsManager
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbContextFactory
+
+<PageTitle>Edit Settings</PageTitle>
+
+<h2>Edit Settings</h2>
+
+@if (Settings is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="d-flex justify-content-center">
+        <div class="card col-md-5">
+            <div class="card-body">
+                <EditForm method="post" Model="Settings" OnValidSubmit="UpdateSettings" FormName="edit" Enhance>
+                    <ObjectGraphDataAnnotationsValidator/>
+                    <ValidationSummary Model="Settings" role="alert"/>
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Activation Code</label>
+                        <InputText id="title" @bind-Value="Settings.ActivationCode" class="form-control" disabled="@_submitting" />
+                        <ValidationMessage For="() => Settings.ActivationCode" class="text-danger" />
+                    </div>
+                    <div class="mb-1">
+                        <label for="hidden" class="form-label">Enable VPN</label>
+                        <InputCheckbox id="hidden" @bind-Value="Settings.EnableVpnManager" class="form-check-input ms-2" disabled="@_submitting" />
+                    </div>
+                    @if (_storedSettings?.EnableVpnManager == true)
+                    {
+                        <div class="d-flex justify-content-center mb-2">
+                            <a href="certificates/ca.crt" class="btn btn-primary me-2" disabled="@_regenerating" download="ca.crt">CA Certificate</a>
+                            <a href="certificates/server.pem" class="btn btn-primary" disabled="@_regenerating" download="server.pem">Server Certificate</a>
+                        </div>
+                        <div class="d-flex justify-content-center">
+                            <button type="button" class="btn btn-primary me-2" disabled="@_regenerating" @onclick="RegenerateCaCert">Regenerate CA</button>
+                            <button type="button" class="btn btn-primary me-2" disabled="@_regenerating" @onclick="RegenerateServerCert">Regenerate Server</button>
+                        </div>
+                        <div class="mb-3">
+                            <label for="title" class="form-label">OpenVPN Template</label>
+                            <InputTextArea id="title" @bind-Value="Settings.OpenVPNTemplate" rows="10" class="form-control" disabled="@_submitting" />
+                            <ValidationMessage For="() => Settings.OpenVPNTemplate" class="text-danger" />
+                        </div>
+                    }
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary" disabled="@_submitting">Save Changes</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showConfirmation)
+{
+    <ConfirmationDialog Title="@(_regenCa ? "Regenerate CA Certificate" : "Regenerate Server Certificate")"
+                        BodyText="@(_regenCa ? "Are you sure you wish to regenerate the CA certificate?" :
+                                      "Are you sure you wish to regenerate the Server certificate?")"
+                        ConfirmText="Regenerate" 
+                        DialogClosed="ConfirmationAction" />
+}
+
+@code {
+    [SupplyParameterFromForm]
+    private ApplicationSettings? Settings { get; set; }
+
+    private ApplicationSettings? _storedSettings;
+    private bool _submitting;
+    
+    private bool _regenerating;
+    private bool _showConfirmation;
+    private bool _regenCa;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _storedSettings = await SettingsManager.GetSettingsAsync();
+            Settings = new ApplicationSettings()
+            {
+                ActivationCode = _storedSettings.ActivationCode,
+                EnableVpnManager = _storedSettings.EnableVpnManager,
+                OpenVPNTemplate = _storedSettings.OpenVPNTemplate
+            };
+            
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateSettings()
+    {
+        _submitting = true;
+        StateHasChanged();
+
+        try
+        {
+            _storedSettings!.ActivationCode = Settings!.ActivationCode;
+            _storedSettings.EnableVpnManager = Settings.EnableVpnManager;
+            _storedSettings.OpenVPNTemplate = Settings.OpenVPNTemplate;
+
+            if (Settings.EnableVpnManager)
+                await VpnCertificateManager.EnsureServerCertificatesCreatedAsync();
+            
+            await SettingsManager.SaveSettingsAsync();
+        }
+        finally
+        {
+            _submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RegenerateCaCert()
+    {
+        _showConfirmation = true;
+        _regenCa = true;
+        StateHasChanged();
+    }
+    private void RegenerateServerCert()
+    {
+        _showConfirmation = true;
+        _regenCa = false;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmationAction(bool confirmed)
+    {
+        _showConfirmation = false;
+        
+        if (!confirmed)
+            return;
+        
+        _regenerating = true;
+        StateHasChanged();
+
+        if (_regenCa)
+        {
+            await using var context = await DbContextFactory.CreateDbContextAsync();
+            foreach (var certificate in context.VpnCertificates.Where(t => t.Valid == true))
+                certificate.Valid = false;
+
+            await context.SaveChangesAsync();
+            await VpnCertificateManager.GenerateNewRootCertificateAsync();
+        }
+        else
+            await VpnCertificateManager.GenerateNewServerCertificateAsync();
+        _regenerating = false;
+        StateHasChanged();
+    }
+
+}
