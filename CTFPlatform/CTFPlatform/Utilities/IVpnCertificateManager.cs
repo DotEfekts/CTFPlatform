@@ -112,16 +112,14 @@ public class AppVpnCertificateManager(
             if(isClient)
                 request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection()
                 {
-                    new Oid("serverAuth", "TLS Web Server Authentication")
+                    new Oid("1.3.6.1.5.5.7.3.2", "clientAuth")
                 }, true));
             else
                 request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection()
                 {
-                    new Oid("clientAuth", "TLS Web Client Authentication")
+                    new Oid("1.3.6.1.5.5.7.3.1", "serverAuth")
                 }, true));
         
-        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension());
-
         var notBefore = DateTimeOffset.Now;
 
         X509Certificate2? certificate = null;
