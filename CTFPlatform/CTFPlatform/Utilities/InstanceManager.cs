@@ -163,8 +163,10 @@ public class TerraformInstanceManager : IInstanceManager
             await KillChallengeInstance(instance);
 
         var deploymentBasePath = new DirectoryInfo(_deploymentsPath);
-        var instanceDeployments = context.ChallengeInstances.Select(t => t.DeploymentPath).Distinct().ToList();
-        var deploymentFolders = Directory.GetDirectories(deploymentBasePath.FullName).Select(t => t.Replace(deploymentBasePath.FullName + Path.DirectorySeparatorChar, ""));
+        var deploymentFullName = deploymentBasePath.FullName + (deploymentBasePath.FullName.EndsWith(Path.DirectorySeparatorChar) ? "" : Path.DirectorySeparatorChar);
+        var instanceDeployments = context.ChallengeInstances.Select(t => t.DeploymentPath).Distinct()
+            .Select(t => deploymentFullName + t).ToList();
+        var deploymentFolders = Directory.GetDirectories(deploymentFullName);
         var orphaned = deploymentFolders.Where(t => !instanceDeployments.Contains(t));
         foreach (var orphan in orphaned)
         {

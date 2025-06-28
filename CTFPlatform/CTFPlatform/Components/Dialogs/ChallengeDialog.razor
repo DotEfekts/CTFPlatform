@@ -88,14 +88,27 @@
                                 <span>Instance expires at @TimeProvider.ToLocalDateTime(_challengeInstance.InstanceExpiry.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt")</span>
                             }
                             <div class="challenge-instance d-flex align-content-center mt-1">
-                                <input name="instance-details" type="text" value="@GetInstanceText()" readonly class="form-control"/>
+                                @if (_challengeInstance == null || _instancePending)
+                                {
+                                    <input name="instance-details" type="text" value="@GetInstanceText()" readonly class="form-control"/>
+                                }
+                                else
+                                {
+                                    
+                                    <div class="input-group">
+                                        <input name="instance-details" type="text" value="@GetInstanceText()" @ref="_hostRef" readonly class="form-control"/>
+                                        <div class="input-group-append">
+                                            <button class="btn btn-info" type="button" @onclick="CopyHost">Copy</button>
+                                        </div>
+                                    </div>
+                                }
                                 @if (_challengeInstance == null)
                                 {
                                     <button type="button" id="start-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_instancePending" @onclick="StartInstance">Start Instance</button>
                                 }
                                 else
                                 {
-                                    <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_instancePending" @onclick="KillInstance">Kill Instance</button>
+                                    <button type="button" id="kill-instance" class="btn btn-danger ms-2" style="white-space: nowrap;" disabled="@_instancePending" @onclick="KillInstance">Kill Instance</button>
                                 }
                             </div>
                         </div>
@@ -149,6 +162,8 @@
     private string _alertType = "";
 
     private Timer? _timer;
+
+    private ElementReference? _hostRef;
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -340,4 +355,13 @@
     }
 
     public void Dispose() => _timer?.Dispose();
+
+    private async Task CopyHost()
+    {
+        if (_challengeInstance == null || _hostRef == null)
+            return;
+        await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _challengeInstance.Host);
+        await JsRuntime.InvokeVoidAsync("selectText", _hostRef);
+    }
+
 }

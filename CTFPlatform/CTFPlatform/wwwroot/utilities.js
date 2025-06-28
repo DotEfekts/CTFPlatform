@@ -13,3 +13,8 @@ function triggerClick(e) {
     if(clickCallback && e.currentTarget === e.target)
         clickCallback.object.invokeMethodAsync(clickCallback.name, e);
 }
+
+function selectText(element) 
+{
+    element.select();
+}
