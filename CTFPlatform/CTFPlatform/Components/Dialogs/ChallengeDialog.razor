@@ -272,9 +272,8 @@
                 }
                 
                 context.Attach(User).State = EntityState.Unchanged;
-                context.FlagSubmissions.Add(new FlagSubmission
+                flag.Submissions.Add(new FlagSubmission
                 {
-                    Flag = flag,
                     User = User,
                     DateSubmitted = DateTime.UtcNow
                 });
