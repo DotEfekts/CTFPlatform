@@ -61,7 +61,7 @@
                             <input type="hidden" name="CtfUser.Id" value="@User.Id" />
                             <div class="mb-3">
                                 <label for="displayname" class="form-label">Display Name</label>
-                                <InputText id="displayname" @bind-Value="User.DisplayName" class="form-control" />
+                                <InputText maxlength="50" id="displayname"  @bind-Value="User.DisplayName" class="form-control" />
                                 <ValidationMessage For="() => User.DisplayName" class="text-danger" />
                             </div>
                     
@@ -137,7 +137,9 @@
     {
         if (User == null)
             return;
-
+        
+        if (User.DisplayName != null && User.DisplayName.Length > 50)
+            User.DisplayName = User.DisplayName.Substring(0, 50); // name = "Chris"
         _user!.DisplayName = string.IsNullOrWhiteSpace(User.DisplayName) ? null : User.DisplayName;
         await _context!.SaveChangesAsync();
         User = null;

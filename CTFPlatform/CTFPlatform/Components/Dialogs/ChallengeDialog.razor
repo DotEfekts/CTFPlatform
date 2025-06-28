@@ -124,7 +124,7 @@
                             </div>
                         }
                         <div class="d-flex align-content-center my-2">
-                            <InputText id="flag" @bind-Value="_flagInput" disabled="@_submitting" class="form-control" @onkeypress="FlagSubmitted" />
+                            <input id="flag" @bind-value="_flagInput" @bind-value:event="oninput" disabled="@_submitting" class="form-control" @onkeydown="FlagSubmitted" />
                             <button type="button" id="flag-submission" class="btn btn-primary ms-2" style="white-space: nowrap;" disabled="@_submitting" @onclick="SubmitFlag">Submit Flag</button>
                         </div>
                     </div>
