@@ -184,7 +184,11 @@ public class TerraformInstanceManager : IInstanceManager
     private string CreateHostString(string hostFormat, Dictionary<string, string> outputs)
     {
         foreach (var output in outputs)
-            hostFormat = hostFormat.Replace($"$({output.Key})", output.Value);
+        {
+            var value = output.Value.StartsWith('"') && output.Value.EndsWith('"') ?
+                output.Value[1..^1] : output.Value;
+            hostFormat = hostFormat.Replace($"$({output.Key})", value);
+        }
         return hostFormat;
     }
 
