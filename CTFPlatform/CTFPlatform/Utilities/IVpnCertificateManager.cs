@@ -105,8 +105,22 @@ public class AppVpnCertificateManager(
         
         request.CertificateExtensions.Add(rootCertificate == null
             ? new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign, true)
-            : new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyAgreement | X509KeyUsageFlags.KeyEncipherment, true)
+            : new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyAgreement, true)
         );
+
+        if (rootCertificate != null)
+            if(isClient)
+                request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection()
+                {
+                    new Oid("serverAuth", "TLS Web Server Authentication")
+                }, true));
+            else
+                request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection()
+                {
+                    new Oid("clientAuth", "TLS Web Client Authentication")
+                }, true));
+        
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension());
 
         var notBefore = DateTimeOffset.Now;
 
