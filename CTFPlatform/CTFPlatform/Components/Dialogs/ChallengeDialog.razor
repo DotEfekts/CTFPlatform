@@ -236,6 +236,7 @@
                 {
                     _alertContent = "You have solved this flag, again!";
                     _alertType = "alert-success";
+                    _flagInput = "";
                     return;
                 }
 
@@ -267,6 +268,7 @@
 
                 _alertContent = $"You have solved this flag and earned {flag.Points} points!";
                 _alertType = "alert-success";
+                _flagInput = "";
             }
             else
             {
