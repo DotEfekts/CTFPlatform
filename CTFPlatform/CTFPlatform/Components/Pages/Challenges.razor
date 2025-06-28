@@ -84,7 +84,7 @@ else
                 .Include(challenge => challenge.Files)
                 .ToList();
             if (_user != null)
-                _solvedFlags = context.FlagSubmissions.Select(t => t.Flag.Id).ToArray();
+                _solvedFlags = _user.Submissions.Select(t => t.Flag.Id).ToArray();
             
             StateHasChanged();
         }
