@@ -270,11 +270,15 @@
                     Challenge = null;
                     return;
                 }
-                
-                context.Attach(User).State = EntityState.Unchanged;
+
+                var user = new CtfUser()
+                {
+                    Id = User.Id
+                };
+                context.Attach(user).State = EntityState.Unchanged;
                 flag.Submissions.Add(new FlagSubmission
                 {
-                    User = User,
+                    User = user,
                     DateSubmitted = DateTime.UtcNow
                 });
                 await context.SaveChangesAsync();
