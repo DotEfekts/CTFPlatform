@@ -1,5 +1,6 @@
 using System.Configuration;
 using System.Net;
+using System.Text;
 using Auth0.AspNetCore.Authentication;
 using CTFPlatform.Components;
 using CTFPlatform.Models;
@@ -141,7 +142,6 @@ else
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
-    app.UseMigrationsEndPoint();
     app.UseForwardedHeaders();
 }
 
@@ -155,7 +155,44 @@ app.UseAuthorization();
 
 app.MapStaticAssets();
 
-app.MapGet("/Account/Login", async (HttpContext httpContext, string returnUrl = "/") =>
+if (app.Environment.IsProduction())
+{
+    app.MapPost("/ApplyMigrations", async context =>
+    {
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(app.Configuration["MigrationKey"]) &&
+            !string.IsNullOrWhiteSpace(authHeader) && authHeader.Split(' ').Length == 2 &&
+            string.Equals(authHeader.Split(' ')[0], "bearer", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(authHeader.Split(' ')[1], app.Configuration["MigrationKey"]))
+        {
+            var dbContextFactory = app.Services.GetRequiredService<IDbContextFactory<BlazorCtfPlatformContext>>();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
+            if (pendingMigrations.Any())
+            {
+                await dbContext.Database.MigrateAsync();
+                context.Response.StatusCode = (int) HttpStatusCode.OK;
+                await context.Response.BodyWriter.WriteAsync("Applied migrations:"u8.ToArray());
+                foreach(var migration in pendingMigrations)
+                    await context.Response.BodyWriter.WriteAsync(Encoding.UTF8.GetBytes("\n" + migration));
+            }
+            else
+            {
+                context.Response.StatusCode = (int) HttpStatusCode.OK;
+                await context.Response.BodyWriter.WriteAsync("No migrations to apply."u8.ToArray());
+            }
+
+        }
+        else
+        {
+            context.Response.StatusCode = (int) HttpStatusCode.Unauthorized;
+        }
+        
+        await context.Response.CompleteAsync();
+    });
+}
+
+app.MapGet("/Account/Login", async Task (HttpContext httpContext, string returnUrl = "/") =>
 {
     var authenticationProperties = new LoginAuthenticationPropertiesBuilder()
         .WithRedirectUri(returnUrl)
@@ -164,7 +201,7 @@ app.MapGet("/Account/Login", async (HttpContext httpContext, string returnUrl = 
     await httpContext.ChallengeAsync(Auth0Constants.AuthenticationScheme, authenticationProperties);
 });
 
-app.MapGet("/Account/Logout", async (HttpContext httpContext, bool login = false) =>
+app.MapGet("/Account/Logout", async Task (HttpContext httpContext, bool login = false) =>
 {
     var authenticationProperties = new LogoutAuthenticationPropertiesBuilder()
         .WithRedirectUri(login ? "/Account/Login" : "/")

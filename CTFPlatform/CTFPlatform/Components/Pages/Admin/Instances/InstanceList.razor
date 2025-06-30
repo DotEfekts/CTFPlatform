@@ -30,7 +30,7 @@ else
             <PropertyColumn Property="instance => instance.Host" Title="Host" />
             <PropertyColumn Property="instance => instance.LoggingInfo" Title="Logging Info" />
             <TemplateColumn Context="instance">
-                <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instance)">Kill Instance</button>
+                <button type="button" id="kill-instance" class="btn btn-danger" @onclick="() => KillInstance(instance)">Kill Instance</button>
             </TemplateColumn>
         </QuickGrid>
     </div>

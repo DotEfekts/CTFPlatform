@@ -1,3 +1,4 @@
+@using System.Security.Claims
 @using CTFPlatform.Utilities
 
 @page "/admin/users/{Id:int}/details"
@@ -9,6 +10,7 @@
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
 @inject TimeProvider TimeProvider
+@inject ILogger<UserDetails> Logger
 
 <PageTitle>User Details</PageTitle>
 
@@ -43,6 +45,9 @@
                     <PropertyColumn Property="@(flag => flag.Flag.Challenge.Title + (flag.Flag.Challenge.Flags.Count > 1 ? " - " + flag.Flag.Name : "" ))" Title="Flag" />
                     <PropertyColumn Property="flag => TimeProvider.ToLocalDateTime(flag.DateSubmitted.TrySpecifyKind(DateTimeKind.Utc))" Format="dd/MM/yyyy" Title="Date Solved" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" />
                     <PropertyColumn Property="flag => flag.Flag.Points" Title="Points Earned" />
+                    <TemplateColumn Context="submission">
+                        <button type="button" id="remove-flag" class="btn btn-danger" @onclick="() => RemoveFlag(submission)">Remove Flag</button>
+                    </TemplateColumn>
                 </QuickGrid>
             </div>
         </div>
@@ -50,6 +55,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
     private CtfUser? _user;
 
     [Parameter]
@@ -69,6 +76,31 @@
             
             StateHasChanged();
         }
+    }
+
+    private async Task RemoveFlag(FlagSubmission submission)
+    {
+        await using var context = await DbFactory.CreateDbContextAsync();
+
+        _user!.Submissions.Remove(submission);
+        
+        var flagSubmission = context.FlagSubmissions
+            .Include(flagSubmission => flagSubmission.Flag)
+            .ThenInclude(ctfFlag => ctfFlag.Challenge)
+            .FirstOrDefault(t => t.Id == submission.Id);
+        
+        if (flagSubmission == null)
+            return;
+        
+        var flag = flagSubmission.Flag;
+        var challenge = flag.Challenge;
+
+        context.FlagSubmissions.Remove(flagSubmission);
+        await context.SaveChangesAsync();
+        
+        var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+        Logger.LogInformation("Flag submission removed - Admin User: {UserId}, User: ({UserId}, {UserAuthId}, {UserDisplayName}), Flag: ({FlagId}, {FlagName}), Challenge: ({ChallengeId}, {ChallengeName})..", 
+            user, _user.Id, _user.AuthId, _user.DisplayName ?? _user.Email, flag.Id, flag.Name, challenge.Id, challenge.Title);
     }
 
 }
