@@ -1,4 +1,5 @@
 @page "/admin/users/{Id:int}/edit"
+@using System.Security.Claims
 @rendermode InteractiveServer
 
 @attribute [Authorize(Roles = CtfUser.AdminRole)]
@@ -6,6 +7,7 @@
 
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject ILogger<EditUser> Logger
 
 <PageTitle>Edit User</PageTitle>
 
@@ -44,6 +46,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
     [Parameter]
     public int Id { get; set; }
 
@@ -75,6 +79,10 @@ else
         try
         {
             await context.SaveChangesAsync();
+            
+            var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+            Logger.LogInformation("User updated - Admin: {AdminUserId}, Updated User: ({UserId}, {UserAuthId}, {UserDisplayName}).", 
+                user, CtfUser.Id, CtfUser.AuthId, CtfUser.DisplayName ?? CtfUser.Email);
         }
         catch (DbUpdateConcurrencyException)
         {

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using ZNetCS.AspNetCore.Logging.EntityFrameworkCore;
 using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,20 +24,51 @@ builder.Services.AddDbContextFactory<BlazorCtfPlatformContext>(options =>
             throw new InvalidOperationException(
                 "Connection string 'BlazorCtfPlatformContext' not found.")));
 
+builder.Logging.AddFilter<EntityFrameworkLoggerProvider<BlazorCtfPlatformContext>>("Microsoft", LogLevel.None);
+builder.Logging.AddFilter<EntityFrameworkLoggerProvider<BlazorCtfPlatformContext>>("System", LogLevel.None);
+builder.Logging.AddEntityFramework<BlazorCtfPlatformContext, AppLog>(
+    opts =>
+    {
+        opts.Creator = (logLevel, eventId, name, message) => new AppLog
+        {
+            TimeStamp = DateTimeOffset.Now,
+            TimeStampSqlite = DateTime.UtcNow,
+            Level = logLevel,
+            EventId = eventId,
+            Name = name,
+            Message = message
+        };
+    });
+
+if (builder.Configuration["Sentry:Dsn"] != null)
+{
+    builder.Logging.AddSentry(o =>
+    {
+        o.Dsn = builder.Configuration["Sentry:Dsn"];
+        // When configuring for the first time, to see what the SDK is doing:
+        o.Debug = builder.Environment.IsDevelopment();
+    });
+}
 builder.Services.AddSingleton<IStoredSettingsManager<ApplicationSettings>, DbContextStoredSettingsManager<ApplicationSettings>>();
 
 builder.Services.AddSingleton<IStoredSettingsManager<VpnInfo>, DbContextStoredSettingsManager<VpnInfo>>();
 builder.Services.AddSingleton<IVpnCertificateManager, AppVpnCertificateManager>();
+builder.Services.AddScoped<ICooldownManager, AppCooldownManager>();
 
 if (!Directory.Exists(builder.Configuration["UploadDirectory"]))
     throw new ConfigurationErrorsException("Invalid upload storage directory.");
 if (!Directory.Exists(builder.Configuration["ManifestDirectory"]))
     throw new ConfigurationErrorsException("Invalid manifest storage directory.");
+if (!Directory.Exists(builder.Configuration["DeploymentDirectory"]))
+    throw new ConfigurationErrorsException("Invalid deployments storage directory.");
 
 var uploadDirectory = new DirectoryInfo(builder.Configuration["UploadDirectory"]!);
 var manifestDirectory = new DirectoryInfo(builder.Configuration["ManifestDirectory"]!);
+var deploymentsDirectory = new DirectoryInfo(builder.Configuration["ManifestDirectory"]!);
 if(uploadDirectory.IsSubdirectoryOf(manifestDirectory) || manifestDirectory.IsSubdirectoryOf(uploadDirectory))
     throw new ConfigurationErrorsException("Manifest and upload directory cannot share paths.");
+if(uploadDirectory.IsSubdirectoryOf(deploymentsDirectory) || deploymentsDirectory.IsSubdirectoryOf(uploadDirectory))
+    throw new ConfigurationErrorsException("Deployments and upload directory cannot share paths.");
 
 builder.Services
     .AddAuth0WebAppAuthentication(options => {
@@ -120,6 +152,8 @@ app.UseAntiforgery();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapStaticAssets();
 
 app.MapGet("/Account/Login", async (HttpContext httpContext, string returnUrl = "/") =>
 {

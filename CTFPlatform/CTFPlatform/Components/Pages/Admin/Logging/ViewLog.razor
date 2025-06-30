@@ -1,0 +1,84 @@
+@page "/admin/log"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@using CTFPlatform.Utilities
+@implements IAsyncDisposable
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject TimeProvider TimeProvider
+
+<PageTitle>Logging</PageTitle>
+
+<h2>Logging</h2>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <div class="d-flex">
+        <div class="d-flex align-items-center page-size-chooser mb-2">
+            <div class="me-2">Items per page:</div>
+            <select @bind="@_pagination.ItemsPerPage" class="form-control" style="width: 150px;">
+                <option>5</option>
+                <option>10</option>
+                <option>25</option>
+                <option>50</option>
+            </select>
+        </div>
+        <div class="d-flex align-items-center severity-chooser mb-2 ms-3">
+            <div class="me-2">Severity:</div>
+            <select @bind="@_severityFilter" class="form-control" style="width: 150px;">
+                <option value="1">Trace</option>
+                <option value="2">Info</option>
+                <option value="3">Warning</option>
+                <option value="4">Error</option>
+                <option value="5">Critical</option>
+            </select>
+        </div>
+        <div class="d-flex align-items-center severity-chooser mb-2 ms-3">
+            <div class="me-2">Filter by Name:</div>
+            <input type="text" @bind="@_nameFilter" class="form-control" style="width: 200px;" />
+        </div>
+    </div>
+    <QuickGrid Class="table" Items="_context.Logs.Where(t => t.Level >= _severityFilter && t.Name.ToLower().Contains(_nameFilter.ToLower())).OrderByDescending(t => t.TimeStampSqlite)" Pagination="@_pagination">
+        <PropertyColumn Property="log => GetSeverity(log.Level)" Title="Severity" />
+        <PropertyColumn Title="Time" InitialSortDirection="SortDirection.Descending"
+            Property="@(log => TimeProvider.ToLocalDateTime(log.TimeStampSqlite.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt"))" />
+        <PropertyColumn Property="log => log.Name" />
+        <PropertyColumn Property="log => log.Message" Class="text-break" />
+    </QuickGrid>
+    <Paginator State="@_pagination" />
+}
+
+@code {
+    private int _severityFilter = 2;
+    private string _nameFilter = "";
+    readonly PaginationState _pagination = new() { ItemsPerPage = 25 };
+    private BlazorCtfPlatformContext? _context;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+
+    private static string GetSeverity(int logLevel) =>
+        logLevel switch
+        {
+            1 => "Trace",
+            2 => "Info",
+            3 => "Warning",
+            4 => "Error",
+            5 => "Critical",
+            _ => "Unknown"
+        };
+}

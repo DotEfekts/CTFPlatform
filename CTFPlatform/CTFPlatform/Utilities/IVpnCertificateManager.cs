@@ -19,7 +19,8 @@ public interface IVpnCertificateManager
 
 public class AppVpnCertificateManager(
         IStoredSettingsManager<ApplicationSettings> appSettingsManager,
-        IStoredSettingsManager<VpnInfo> vpnSettingsManager
+        IStoredSettingsManager<VpnInfo> vpnSettingsManager,
+        ILogger<AppVpnCertificateManager> logger
     ) : IVpnCertificateManager
 {
     private VpnInfo? _vpnInfo;
@@ -48,7 +49,9 @@ public class AppVpnCertificateManager(
         var appSettings = await appSettingsManager.GetSettingsAsync();
         var newCert = GenerateSignedCertificate(appSettings.RootSubject);
         _vpnInfo.RootCertificate = newCert;
-
+        
+        logger.LogInformation("New CA certificate generated - Certificate thumbprint: {Thumbprint}.", newCert.Thumbprint);
+        
         await GenerateNewServerCertificateAsync();
     }
 
@@ -61,13 +64,17 @@ public class AppVpnCertificateManager(
         var newCert = GenerateSignedCertificate(appSettings.ServerSubject, _vpnInfo.RootCertificate!, false);
         _vpnInfo.ServerCertificate = newCert;
 
+        logger.LogInformation("New server certificate generated - Certificate thumbprint: {Thumbprint}.", newCert.Thumbprint);
+        
         await vpnSettingsManager.SaveSettingsAsync();
     }
 
     public async Task<X509Certificate2> GenerateSignedCertificateAsync(string userId)
     {
         await EnsureServerCertificatesCreatedAsync();
-        return GenerateSignedCertificate("user_" + userId, _vpnInfo!.RootCertificate);
+        var newCert = GenerateSignedCertificate("user_" + userId, _vpnInfo!.RootCertificate);
+        logger.LogInformation("New client certificate generated - User: {UserId}, Certificate thumbprint: {Thumbprint}.", userId, newCert.Thumbprint);
+        return newCert;
     }
 
     public async Task<byte[]> GetCaCertificate()

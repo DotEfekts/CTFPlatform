@@ -8,6 +8,7 @@ public interface IInstanceManager
 {
     Task<ChallengeInstance?> CheckChallengeInstance(InstanceChallenge challenge, CtfUser user);
     Task<ChallengeInstance?> GetOrDeployChallengeInstance(InstanceChallenge challenge, CtfUser user);
+    Task<bool> KillUserInstance(ChallengeInstance challengeInstance, CtfUser user);
     Task<bool> KillChallengeInstance(ChallengeInstance challengeInstance);
     Task Clean();
 }
@@ -28,28 +29,20 @@ public class TerraformCleanupManager(IServiceProvider services) : ICleanupManage
 
 public class InstanceRunnerException(string message, Exception innerException) : Exception(message, innerException);
 
-public class TerraformInstanceManager : IInstanceManager
+public class TerraformInstanceManager(
+    IConfiguration config,
+    IDbContextFactory<BlazorCtfPlatformContext> dbFactory,
+    ILogger<TerraformInstanceManager> logger)
+    : IInstanceManager
 {
-    private readonly IDbContextFactory<BlazorCtfPlatformContext> _dbFactory;
-    private readonly string _manifestPath;
-    private readonly string _deploymentsPath;
-    public TerraformInstanceManager(
-        IConfiguration config,
-        IDbContextFactory<BlazorCtfPlatformContext> dbFactory)
-    {
-        _dbFactory = dbFactory;
+    private readonly string _manifestPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar;
+    private readonly string _deploymentsPath = config["DeploymentDirectory"] + Path.DirectorySeparatorChar;
 
-        _manifestPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar;
-        _deploymentsPath = _manifestPath + "deployments" + Path.DirectorySeparatorChar;
-
-        if (!Directory.Exists(_deploymentsPath))
-            Directory.CreateDirectory(_deploymentsPath);
-    }
-    
     public async Task<ChallengeInstance?> CheckChallengeInstance(InstanceChallenge challenge, CtfUser user)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync();
-        return context.ChallengeInstances.FirstOrDefault(t => t.User == user && t.Challenge == challenge);
+        await using var context = await dbFactory.CreateDbContextAsync();
+        return context.UserInstances.Include(userInstance => userInstance.Instance)
+            .FirstOrDefault(t => t.User == user && !t.KillProcessed && t.Instance.Challenge == challenge)?.Instance;
     }
 
     public async Task<ChallengeInstance?> GetOrDeployChallengeInstance(InstanceChallenge challenge, CtfUser user)
@@ -58,24 +51,30 @@ public class TerraformInstanceManager : IInstanceManager
         if (instance != null)
             return instance;
 
-        await using var context = await _dbFactory.CreateDbContextAsync();
+        await using var context = await dbFactory.CreateDbContextAsync();
         if (challenge.Shared)
-        {
-            var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge == challenge);
+        {           
+            var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge == challenge && !t.Destroyed);
             if (sharedInstance != null)
             {
-                instance = new ChallengeInstance
+                logger.LogInformation("User joining instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+                    user.Id, user.AuthId, user.DisplayName ?? user.Email, sharedInstance.Id, sharedInstance.LoggingInfo, challenge.Id, challenge.Title); 
+                sharedInstance.InstanceExpiry = DateTime.UtcNow.AddMinutes(challenge.ExpiryTime);
+                context.UserInstances.Add(new UserInstance
                 {
-                    Challenge = challenge,
-                    User = user,
-                    InstanceExpiry = DateTime.UtcNow.AddSeconds(challenge.ExpiryTime ?? 86400),
-                    Host = sharedInstance.Host,
-                    DeploymentPath = sharedInstance.DeploymentPath
-                };
-                context.ChallengeInstances.Add(instance);
+                    KillProcessed = false,
+                    RequestCreated = DateTime.UtcNow,
+                    Instance = sharedInstance,
+                    User = user
+                });
                 await context.SaveChangesAsync();
+
+                return sharedInstance;
             }
         }
+        
+        logger.LogTrace("Deploying new instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+            user.Id, user.AuthId, user.DisplayName ?? user.Email, challenge.Id, challenge.Title); 
         
         Guid directory;
         do directory = Guid.NewGuid();
@@ -87,11 +86,23 @@ public class TerraformInstanceManager : IInstanceManager
         instance = new ChallengeInstance
         {
             Challenge = challenge,
-            User = user,
-            InstanceExpiry = DateTime.UtcNow.AddSeconds(challenge.ExpiryTime ?? 86400),
+            Destroyed = false,
+            InstanceExpiry = DateTime.UtcNow.AddMinutes(challenge.ExpiryTime),
             Host = "",
+            LoggingInfo = "",
             DeploymentPath = directory.ToString()
         };
+        instance.UserInstances =
+        [
+            new UserInstance
+            {
+                KillProcessed = false,
+                RequestCreated = DateTime.UtcNow,
+                Instance = instance,
+                User = user
+            }
+        ];
+        
         context.ChallengeInstances.Add(instance);
         await context.SaveChangesAsync();
         
@@ -104,35 +115,59 @@ public class TerraformInstanceManager : IInstanceManager
             Directory.CreateDirectory(deploymentPath);
             outputs = await StartDeployment(deploymentPath, Path.GetRelativePath(deploymentPath, manifestPath));
         }
-        catch
+        catch(Exception e)
         {
+            logger.LogError(e, "Instance deployment failed - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+                user.Id, user.AuthId, user.DisplayName ?? user.Email, challenge.Id, challenge.Title);
             return null;
         }
 
-        instance.Host = CreateHostString(challenge.HostFormat, outputs);
+        instance.Host = FormatTerraformString(challenge.HostFormat, outputs);
+        instance.LoggingInfo = FormatTerraformString(challenge.LoggingInfoFormat, outputs);
+        
+        logger.LogInformation("New instance deployed - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+            user.Id, user.AuthId, user.DisplayName ?? user.Email, instance.Id, instance.LoggingInfo, challenge.Id, challenge.Title); 
+        
         await context.SaveChangesAsync();
         return instance;
     }
 
+    public async Task<bool> KillUserInstance(ChallengeInstance challengeInstance, CtfUser user)
+    {
+        await using var context = await dbFactory.CreateDbContextAsync();
+        var userInstance = challengeInstance.UserInstances.FirstOrDefault(t => !t.KillProcessed && t.User == user);
+        if (userInstance == null)
+            return true;
+
+        if (challengeInstance.UserInstances.All(t => t.KillProcessed || t.Id == userInstance.Id))
+        {
+            logger.LogInformation("User killing instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+                user.Id, user.AuthId, user.DisplayName ?? user.Email, challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title);
+            return await KillChallengeInstance(challengeInstance);
+        }
+        
+        logger.LogInformation("User left instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+            user.Id, user.AuthId, user.DisplayName ?? user.Email, challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title); 
+        userInstance.KillProcessed = true;
+        await context.SaveChangesAsync();
+        return true;
+
+    }
+
     public async Task<bool> KillChallengeInstance(ChallengeInstance challengeInstance)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync();
+        await using var context = await dbFactory.CreateDbContextAsync();
         
         var instance = context.ChallengeInstances
             .Include(i => i.Challenge)
+            .Include(i => i.UserInstances)
             .FirstOrDefault(t => t.Id == challengeInstance.Id);
         
         if(instance == null)
             return true;
             
-        if (instance.Challenge.Shared && context.ChallengeInstances
-                .Any(t => t.DeploymentPath == challengeInstance.DeploymentPath && t != challengeInstance))
-        {
-            context.ChallengeInstances.Remove(instance);
-            await context.SaveChangesAsync();
-    
-            return true;
-        }
+        logger.LogTrace("Killing challenge instance - Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+            challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title); 
         
         var directory = challengeInstance.DeploymentPath;
         var deploymentPath = _deploymentsPath + directory;
@@ -143,13 +178,18 @@ public class TerraformInstanceManager : IInstanceManager
                 await KillDeployment(deploymentPath);
                 Directory.Delete(deploymentPath, true);
             }
-            catch
+            catch(Exception e)
             {
+                logger.LogError(e, "Instance destruction failed - Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+                    challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title);
                 return false;
             }
         }
+
+        instance.Destroyed = true;
+        foreach (var userInstance in instance.UserInstances)
+            userInstance.KillProcessed = true;
         
-        context.ChallengeInstances.Remove(instance);
         await context.SaveChangesAsync();
         
         return true;
@@ -157,7 +197,7 @@ public class TerraformInstanceManager : IInstanceManager
 
     public async Task Clean()
     {
-        await using var context = await _dbFactory.CreateDbContextAsync();
+        await using var context = await dbFactory.CreateDbContextAsync();
         var expiredInstances = context.ChallengeInstances.Where(t => t.InstanceExpiry <= DateTime.UtcNow).ToList();
         foreach (var instance in expiredInstances)
             await KillChallengeInstance(instance);
@@ -176,28 +216,30 @@ public class TerraformInstanceManager : IInstanceManager
                 await KillDeployment(deploymentPath);
                 Directory.Delete(deploymentPath, true);
             }
-            catch
+            catch(Exception e)
             {
-                // ignored
+                logger.LogError(e, "Orphan cleanup failed - Orphan: ({OrphanPath}).", orphan);
             }
         }
     }
 
-    private string CreateHostString(string hostFormat, Dictionary<string, string> outputs)
+    private string FormatTerraformString(string format, Dictionary<string, string> outputs)
     {
         foreach (var output in outputs)
         {
             var value = output.Value.StartsWith('"') && output.Value.EndsWith('"') ?
                 output.Value[1..^1] : output.Value;
-            hostFormat = hostFormat.Replace($"$({output.Key})", value);
+            format = format.Replace($"$({output.Key})", value);
         }
-        return hostFormat;
+        return format;
     }
 
     private async Task<Dictionary<string, string>> StartDeployment(string deploymentPath, string manifestPath)
     {
         var outputText = "";
         var standardError = "";
+
+        logger.LogTrace("Running Terraform init - Deployment path: {DeploymentPath}.", deploymentPath); 
         
         try
         {
@@ -220,16 +262,23 @@ public class TerraformInstanceManager : IInstanceManager
             Console.Write(standardError);
             await process.WaitForExitAsync();
 
+            logger.LogTrace("Terraform init run - Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.",
+                deploymentPath, outputText, standardError); 
+
             if (process.ExitCode != 0)
                 throw new Exception("Program did not exit correctly.");
         }
         catch (Exception e)
         {
+            logger.LogError(e, "Terraform init failed - Manifest path: {ManifestPath}, Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.", 
+                manifestPath, deploymentPath, outputText, standardError); 
             throw new InstanceRunnerException("Error initialising instance.", e)
             {
                 Data = { { "stdout", outputText }, { "stderr", standardError } }
             };
         }
+        
+        logger.LogTrace("Running Terraform apply - Deployment path: {DeploymentPath}.", deploymentPath); 
         
         try
         {
@@ -252,16 +301,23 @@ public class TerraformInstanceManager : IInstanceManager
             Console.Write(standardError);
             await process.WaitForExitAsync();
 
+            logger.LogTrace("Terraform apply run - Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.",
+                deploymentPath, outputText, standardError); 
+
             if (process.ExitCode != 0)
                 throw new Exception("Program did not exit correctly.");
         }
         catch (Exception e)
         {
+            logger.LogError(e, "Terraform apply failed - Manifest path: {ManifestPath}, Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.", 
+                manifestPath, deploymentPath, outputText, standardError); 
             throw new InstanceRunnerException("Error starting instance.", e)
             {
                 Data = { { "stdout", outputText }, { "stderr", standardError } }
             };
         }
+        
+        logger.LogTrace("Running Terraform output - Deployment path: {DeploymentPath}.", deploymentPath); 
         
         try
         {
@@ -284,11 +340,16 @@ public class TerraformInstanceManager : IInstanceManager
             Console.Write(standardError);
             await process.WaitForExitAsync();
 
+            logger.LogTrace("Terraform output run - Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.",
+                deploymentPath, outputText, standardError); 
+
             if (process.ExitCode != 0)
                 throw new Exception("Program did not exit correctly.");
         }
         catch (Exception e)
         {
+            logger.LogError(e, "Terraform output failed - Manifest path: {ManifestPath}, Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.", 
+                manifestPath, deploymentPath, outputText, standardError); 
             throw new InstanceRunnerException("Error starting instance.", e)
             {
                 Data = { { "stdout", outputText }, { "stderr", standardError } }
@@ -313,6 +374,8 @@ public class TerraformInstanceManager : IInstanceManager
         var outputText = "";
         var standardError = "";
         
+        logger.LogTrace("Running Terraform destroy - Deployment path: {DeploymentPath}.", deploymentPath); 
+        
         try
         {
             using var process = new Process();
@@ -334,11 +397,16 @@ public class TerraformInstanceManager : IInstanceManager
             Console.Write(standardError);
             await process.WaitForExitAsync();
 
+            logger.LogTrace("Terraform destroy run - Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.",
+                deploymentPath, outputText, standardError); 
+            
             if (process.ExitCode != 0)
                 throw new Exception("Program did not exit correctly.");
         }
         catch (Exception e)
         {
+            logger.LogError(e, "Terraform destroy failed - Deployment path: {DeploymentPath}, stdout: {Output}, stderr: {Error}.",
+                deploymentPath, outputText, standardError); 
             throw new InstanceRunnerException("Error killing instance.", e)
             {
                 Data = { { "stdout", outputText }, { "stderr", standardError } }

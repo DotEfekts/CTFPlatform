@@ -17,6 +17,7 @@
 @inject NavigationManager NavigationManager
 @inject Auth0ManagementTokenProvider TokenProvider
 @inject IStoredSettingsManager<ApplicationSettings> SettingsManager
+@inject ILogger<Unlock> Logger
 
 <PageTitle>Activate</PageTitle>
 
@@ -107,7 +108,9 @@ else
 
                 var result = await client.Users.GetRolesAsync(_authId);
                 if (result.All(t => t.Name != CtfUser.UserRole))
+                {
                     throw new ConfigurationErrorsException("Failed to set role for user.");
+                }
 
                 _success = true;
                 _codeError = null;
@@ -115,10 +118,14 @@ else
                 _timer = new Timer
                 {
                     AutoReset = false,
-                    Interval = 5 * 1000,
+                    Interval = 3 * 1000,
                 };
                 _timer.Elapsed += Redirect;
                 _timer.Start();
+                
+                Logger.LogInformation("User activated - User: {UserId}.",
+                    _authId);
+                
             }
             else
             {
@@ -128,8 +135,10 @@ else
 
             StateHasChanged();
         }
-        catch
+        catch(Exception e)
         {
+            Logger.LogError(e, "Error occurred during user activation - User: {UserId}.",
+                _authId);
             _codeError = "An unknown error occurred.";
             _submitting = false;
             StateHasChanged();

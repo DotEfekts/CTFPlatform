@@ -23,9 +23,12 @@ public class InstanceChallenge : Challenge
 {
     [Required]
     public string DeploymentManifestPath { get; set; }
-    public int? ExpiryTime { get; set; }
+    [Required]
+    public int ExpiryTime { get; set; }
     public bool Shared { get; set; }
     [Required]
     public string HostFormat { get; set; }
+    [Required]
+    public string LoggingInfoFormat { get; set; }
     public virtual List<ChallengeInstance> Instances { get; set; }
 }

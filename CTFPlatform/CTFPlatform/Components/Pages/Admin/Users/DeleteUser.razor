@@ -1,4 +1,5 @@
 @page "/admin/users/{Id:int}/delete"
+@using System.Security.Claims
 @rendermode InteractiveServer
 
 @attribute [Authorize(Roles = CtfUser.AdminRole)]
@@ -6,6 +7,7 @@
 
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject ILogger<DeleteUser> Logger
 
 <PageTitle>Delete User</PageTitle>
 
@@ -46,6 +48,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
     private CtfUser? _user;
 
     [Parameter]
@@ -72,6 +76,11 @@
         await using var context = await DbFactory.CreateDbContextAsync();
         context.Users.Remove(_user!);
         await context.SaveChangesAsync();
+        
+        var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+        Logger.LogInformation("User deleted - Admin: {AdminUserId}, Deleted User: ({UserId}, {UserAuthId}, {UserDisplayName}).", 
+            user, _user.Id, _user.AuthId, _user.DisplayName ?? _user.Email);
+        
         NavigationManager.NavigateTo("admin/users");
     }
 }

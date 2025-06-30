@@ -1,4 +1,5 @@
 @page "/admin/challenges/{Id:int}/edit"
+@using System.Security.Claims
 @rendermode InteractiveServer
 
 @attribute [Authorize(Roles = CtfUser.AdminRole)]
@@ -7,6 +8,7 @@
 @inject IConfiguration Config
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject ILogger<EditChallenge> Logger
 
 <PageTitle>Edit Challenge</PageTitle>
 
@@ -56,12 +58,17 @@ else
                             <InputText id="host" @bind-Value="instanceChallenge.HostFormat" class="form-control" disabled="@_submitting" />
                             <ValidationMessage For="() => instanceChallenge.HostFormat" class="text-danger" />
                         </div>
+                        <div class="mb-3">
+                            <label for="host" class="form-label">Logging Format</label>
+                            <InputText id="host" @bind-Value="instanceChallenge.LoggingInfoFormat" class="form-control" disabled="@_submitting" />
+                            <ValidationMessage For="() => instanceChallenge.LoggingInfoFormat" class="text-danger" />
+                        </div>
                         <div class="mb-1">
                             <label for="shared" class="form-label">Is Shared</label>
                             <InputCheckbox id="shared" @bind-Value="instanceChallenge.Shared" class="form-check-input ms-2" disabled="@_submitting" />
                         </div>
                         <div class="mb-3">
-                            <label for="expiry" class="form-label">Expiry Time</label>
+                            <label for="expiry" class="form-label">Expiry Time (Minutes)</label>
                             <InputNumber id="expiry" @bind-Value="instanceChallenge.ExpiryTime" class="form-control" disabled="@_submitting" />
                             <ValidationMessage For="() => instanceChallenge.ExpiryTime" class="text-danger" />
                         </div>
@@ -183,6 +190,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
     [Parameter]
     public int Id { get; set; }
 
@@ -289,6 +298,9 @@ else
             try
             {
                 await context.SaveChangesAsync();
+        
+                var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+                Logger.LogInformation("Challenge updated - User: {UserId}, Challenge: ({ChallengeId}, {ChallengeName}).", user, Challenge.Id, Challenge.Title);
             }
             catch (DbUpdateConcurrencyException)
             {

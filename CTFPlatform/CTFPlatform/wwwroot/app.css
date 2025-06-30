@@ -114,3 +114,7 @@ button.btn-info {
     background-color: #117a8b;
     border-color: #10707f;
 }
+
+td.text-break {
+    word-break: break-word;
+}

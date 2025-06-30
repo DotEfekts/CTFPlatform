@@ -1,0 +1,64 @@
+@page "/admin/instances"
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = CtfUser.AdminRole)]
+@attribute [StreamRendering]
+
+@using System.Security.Claims
+@using CTFPlatform.Utilities
+@implements IAsyncDisposable
+@inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
+@inject TimeProvider TimeProvider
+@inject IInstanceManager InstanceManager
+@inject ILogger<InstanceList> Logger
+
+<PageTitle>Instances</PageTitle>
+
+<h2>Instances</h2>
+
+@if (_context == null)
+{
+    <span><i>Loading...</i></span>
+}
+else
+{
+    <div>
+        <QuickGrid Class="table" @ref="_table" Items="_context.ChallengeInstances.Where(t => !t.Destroyed)">
+            <PropertyColumn Property="instance => instance.Challenge.Title" Title="Challenge" />
+            <PropertyColumn Property="@(instance => string.Join(", ", instance.UserInstances.Select(t => t.User.DisplayName ?? t.User.Email)))" Title="Users" />
+            <PropertyColumn Property="@(instance => TimeProvider.ToLocalDateTime(instance.InstanceExpiry.TrySpecifyKind(DateTimeKind.Utc)).ToString("dd/MM/yyyy h:mm:ss tt"))" Title="Instance Expiry" />
+            <PropertyColumn Property="instance => instance.Host" Title="Host" />
+            <PropertyColumn Property="instance => instance.LoggingInfo" Title="Logging Info" />
+            <TemplateColumn Context="instance">
+                <button type="button" id="kill-instance" class="btn btn-primary ms-2" style="white-space: nowrap;" @onclick="() => KillInstance(instance)">Kill Instance</button>
+            </TemplateColumn>
+        </QuickGrid>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
+    private BlazorCtfPlatformContext? _context;
+    private QuickGrid<ChallengeInstance> _table;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _context = await DbFactory.CreateDbContextAsync();
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await (_context?.DisposeAsync() ?? ValueTask.CompletedTask);
+
+    private async Task KillInstance(ChallengeInstance instance)
+    {
+        var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+        Logger.LogInformation("Admin requested instance kill - User: {UserId}, Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
+            user, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title);
+        await InstanceManager.KillChallengeInstance(instance);
+        await _table.RefreshDataAsync();
+    }
+}

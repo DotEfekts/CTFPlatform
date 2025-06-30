@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using CTFPlatform.Migrations;
 using CTFPlatform.Models;
 using CTFPlatform.Models.Settings;
 using CTFPlatform.Utilities;
@@ -12,9 +13,13 @@ namespace CTFPlatform.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class CertificatesController(BlazorCtfPlatformContext context, IStoredSettingsManager<ApplicationSettings> settingsManager, IVpnCertificateManager certificateManager) : ControllerBase
+public class CertificatesController(
+    BlazorCtfPlatformContext context, 
+    IStoredSettingsManager<ApplicationSettings> settingsManager, 
+    IVpnCertificateManager certificateManager,
+    ILogger<CertificatesController> logger) : ControllerBase
 {
-    [Authorize(Roles = CtfUser.UserRole)]
+    [Authorize(Roles = $"{CtfUser.UserRole},{CtfUser.AdminRole}")]
     [HttpGet("ca.crt")]
     public async Task<ActionResult> GetCaCertificate()
     {
@@ -34,6 +39,9 @@ public class CertificatesController(BlazorCtfPlatformContext context, IStoredSet
         if (user == null || user.Locked)
             return BadRequest();
 
+        
+        logger.LogInformation("VPN profile request - User: ({UserId}, {UserAuthId}, {UserDisplayName}).", 
+            user.Id, user.AuthId, user.DisplayName ?? user.Email);
         var certStore = user.Certificates.Where(t => t.Expiry >= DateTime.UtcNow.AddDays(5) && t.Valid).ToList();
         foreach (var storedCert in certStore)
         {

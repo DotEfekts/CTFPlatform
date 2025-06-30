@@ -1,5 +1,6 @@
 using System.Net.Mime;
 using CTFPlatform.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ namespace CTFPlatform.Controllers;
 [Route("[controller]")]
 public class FilesController(IDbContextFactory<BlazorCtfPlatformContext> dbFactory, IConfiguration config) : ControllerBase
 {
+    [Authorize(Roles = CtfUser.UserRole)]
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetFile(int id)
     {

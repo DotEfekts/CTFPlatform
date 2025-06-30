@@ -1,4 +1,5 @@
 @page "/admin/settings"
+@using System.Security.Claims
 @using CTFPlatform.Models.Settings
 @using CTFPlatform.Utilities
 @rendermode InteractiveServer
@@ -9,6 +10,7 @@
 @inject IVpnCertificateManager VpnCertificateManager
 @inject IStoredSettingsManager<ApplicationSettings> SettingsManager
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbContextFactory
+@inject ILogger<EditSettings> Logger
 
 <PageTitle>Edit Settings</PageTitle>
 
@@ -31,6 +33,23 @@ else
                         <InputText id="title" @bind-Value="Settings.ActivationCode" class="form-control" disabled="@_submitting" />
                         <ValidationMessage For="() => Settings.ActivationCode" class="text-danger" />
                     </div>
+                    <div class="mb-1">
+                        <label for="hidden" class="form-label">Enable Instance Creation Cooldown</label>
+                        <InputCheckbox id="hidden" @bind-Value="Settings.EnableSpawningCooldown" class="form-check-input ms-2" disabled="@_submitting" />
+                    </div>
+                    @if (Settings.EnableSpawningCooldown)
+                    {
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Cooldown Timespan (Minutes)</label>
+                            <InputNumber id="title" @bind-Value="Settings.CooldownTimespan" class="form-control" disabled="@_submitting" />
+                            <ValidationMessage For="() => Settings.CooldownTimespan" class="text-danger" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Cooldown Max Instances</label>
+                            <InputNumber id="title" @bind-Value="Settings.CooldownLimit" class="form-control" disabled="@_submitting" />
+                            <ValidationMessage For="() => Settings.CooldownLimit" class="text-danger" />
+                        </div>
+                    }
                     <div class="mb-1">
                         <label for="hidden" class="form-label">Enable VPN</label>
                         <InputCheckbox id="hidden" @bind-Value="Settings.EnableVpnManager" class="form-check-input ms-2" disabled="@_submitting" />
@@ -70,6 +89,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+    
     [SupplyParameterFromForm]
     private ApplicationSettings? Settings { get; set; }
 
@@ -88,6 +109,9 @@ else
             Settings = new ApplicationSettings()
             {
                 ActivationCode = _storedSettings.ActivationCode,
+                EnableSpawningCooldown = _storedSettings.EnableSpawningCooldown,
+                CooldownTimespan = _storedSettings.CooldownTimespan,
+                CooldownLimit = _storedSettings.CooldownLimit,
                 EnableVpnManager = _storedSettings.EnableVpnManager,
                 OpenVPNTemplate = _storedSettings.OpenVPNTemplate
             };
@@ -104,6 +128,11 @@ else
         try
         {
             _storedSettings!.ActivationCode = Settings!.ActivationCode;
+            
+            _storedSettings.EnableSpawningCooldown = Settings.EnableSpawningCooldown;
+            _storedSettings.CooldownTimespan = Settings.CooldownTimespan;
+            _storedSettings.CooldownLimit = Settings.CooldownLimit;
+            
             _storedSettings.EnableVpnManager = Settings.EnableVpnManager;
             _storedSettings.OpenVPNTemplate = Settings.OpenVPNTemplate;
 
@@ -111,6 +140,9 @@ else
                 await VpnCertificateManager.EnsureServerCertificatesCreatedAsync();
             
             await SettingsManager.SaveSettingsAsync();
+
+            var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
+            Logger.LogInformation("Server settings updated - User: {UserId}.", user);
         }
         finally
         {
@@ -141,6 +173,8 @@ else
         
         _regenerating = true;
         StateHasChanged();
+        
+        var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
 
         if (_regenCa)
         {
@@ -149,10 +183,16 @@ else
                 certificate.Valid = false;
 
             await context.SaveChangesAsync();
+            
+            Logger.LogInformation("Admin requested CA certificate regeneration - User: {UserId}.", user);
+            
             await VpnCertificateManager.GenerateNewRootCertificateAsync();
         }
         else
+        {
+            Logger.LogInformation("Admin requested server certificate regeneration - User: {UserId}.", user);
             await VpnCertificateManager.GenerateNewServerCertificateAsync();
+        }
         _regenerating = false;
         StateHasChanged();
     }

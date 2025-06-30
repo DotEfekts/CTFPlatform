@@ -3,6 +3,7 @@ using System;
 using CTFPlatform.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CTFPlatform.Migrations
 {
     [DbContext(typeof(BlazorCtfPlatformContext))]
-    partial class BlazorCtfPlatformContextModelSnapshot : ModelSnapshot
+    [Migration("20250630111824_Normalised DB. Added logging.")]
+    partial class NormalisedDBAddedlogging
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -20,38 +23,6 @@ namespace CTFPlatform.Migrations
                 .HasAnnotation("Proxies:ChangeTracking", false)
                 .HasAnnotation("Proxies:CheckEquality", false)
                 .HasAnnotation("Proxies:LazyLoading", true);
-
-            modelBuilder.Entity("CTFPlatform.Models.AppLog", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("EventId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Level")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("TimeStamp")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("TimeStampSqlite")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Log", (string)null);
-                });
 
             modelBuilder.Entity("CTFPlatform.Models.Challenge", b =>
                 {
@@ -295,6 +266,35 @@ namespace CTFPlatform.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("VpnCertificates");
+                });
+
+            modelBuilder.Entity("ZNetCS.AspNetCore.Logging.EntityFrameworkCore.Log", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("EventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("TimeStamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Log", (string)null);
                 });
 
             modelBuilder.Entity("CTFPlatform.Models.InstanceChallenge", b =>
