@@ -99,7 +99,7 @@
         await context.SaveChangesAsync();
         
         var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
-        Logger.LogInformation("Flag submission removed - Admin User: {UserId}, User: ({UserId}, {UserAuthId}, {UserDisplayName}), Flag: ({FlagId}, {FlagName}), Challenge: ({ChallengeId}, {ChallengeName})..", 
+        Logger.LogInformation("Flag submission removed - Admin User: {UserId}, User: ({UserId}, {UserAuthId}, {UserDisplayName}), Flag: ({FlagId}, {FlagName}), Challenge: ({ChallengeId}, {ChallengeName}).", 
             user, _user.Id, _user.AuthId, _user.DisplayName ?? _user.Email, flag.Id, flag.Name, challenge.Id, challenge.Title);
     }
 
