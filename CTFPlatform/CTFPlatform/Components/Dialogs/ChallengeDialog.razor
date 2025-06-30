@@ -297,7 +297,7 @@
                 await context.SaveChangesAsync();
                 await FlagCompleted.InvokeAsync(flag.Id);
                 Logger.LogInformation("Successful flag submission - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Flag: ({FlagId}, {FlagName}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-                    user.Id, user.AuthId, user.DisplayName ?? user.Email, flag.Id, flag.Name, flag.Challenge.Id, flag.Challenge.Title);
+                    User.Id, User.AuthId, User.DisplayName ?? User.Email, flag.Id, flag.Name, flag.Challenge.Id, flag.Challenge.Title);
 
                 _alertContent = $"You have solved this flag and earned {flag.Points} points!";
                 _alertType = "alert-success";
