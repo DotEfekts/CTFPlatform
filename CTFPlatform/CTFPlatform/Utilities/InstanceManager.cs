@@ -42,7 +42,7 @@ public class TerraformInstanceManager(
     {
         await using var context = await dbFactory.CreateDbContextAsync();
         return context.UserInstances.Include(userInstance => userInstance.Instance)
-            .FirstOrDefault(t => t.User == user && !t.KillProcessed && t.Instance.Challenge == challenge)?.Instance;
+            .FirstOrDefault(t => t.User.Id == user.Id && !t.KillProcessed && t.Instance.Challenge.Id == challenge.Id)?.Instance;
     }
 
     public async Task<ChallengeInstance?> GetOrDeployChallengeInstance(InstanceChallenge challenge, CtfUser user)
@@ -54,18 +54,19 @@ public class TerraformInstanceManager(
         await using var context = await dbFactory.CreateDbContextAsync();
         if (challenge.Shared)
         {           
-            var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge == challenge && !t.Destroyed);
+            var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge.Id == challenge.Id && !t.Destroyed);
+            var dbUser = context.Users.First(t => t.Id == user.Id);
             if (sharedInstance != null)
             {
                 logger.LogInformation("User joining instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-                    user.Id, user.AuthId, user.DisplayName ?? user.Email, sharedInstance.Id, sharedInstance.LoggingInfo, challenge.Id, challenge.Title); 
+                    dbUser.Id, dbUser.AuthId, dbUser.DisplayName ?? dbUser.Email, sharedInstance.Id, sharedInstance.LoggingInfo, challenge.Id, challenge.Title); 
                 sharedInstance.InstanceExpiry = DateTime.UtcNow.AddMinutes(challenge.ExpiryTime);
                 context.UserInstances.Add(new UserInstance
                 {
                     KillProcessed = false,
                     RequestCreated = DateTime.UtcNow,
                     Instance = sharedInstance,
-                    User = user
+                    User = dbUser
                 });
                 await context.SaveChangesAsync();
 
