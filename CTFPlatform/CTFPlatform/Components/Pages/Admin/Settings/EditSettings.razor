@@ -28,6 +28,10 @@ else
                 <EditForm method="post" Model="Settings" OnValidSubmit="UpdateSettings" FormName="edit" Enhance>
                     <ObjectGraphDataAnnotationsValidator/>
                     <ValidationSummary Model="Settings" role="alert"/>
+                    <div class="mb-1">
+                        <label for="hidden" class="form-label">Freeze CTF</label>
+                        <InputCheckbox id="hidden" @bind-Value="Settings.FreezeCtf" class="form-check-input ms-2" disabled="@_submitting" />
+                    </div>
                     <div class="mb-3">
                         <label for="title" class="form-label">Activation Code</label>
                         <InputText id="title" @bind-Value="Settings.ActivationCode" class="form-control" disabled="@_submitting" />
@@ -66,8 +70,8 @@ else
                         </div>
                         <div class="mb-3">
                             <label for="title" class="form-label">OpenVPN Template</label>
-                            <InputTextArea id="title" @bind-Value="Settings.OpenVPNTemplate" rows="10" class="form-control" disabled="@_submitting" />
-                            <ValidationMessage For="() => Settings.OpenVPNTemplate" class="text-danger" />
+                            <InputTextArea id="title" @bind-Value="Settings.OpenVpnTemplate" rows="10" class="form-control" disabled="@_submitting" />
+                            <ValidationMessage For="() => Settings.OpenVpnTemplate" class="text-danger" />
                         </div>
                     }
                     <div class="d-flex justify-content-end">
@@ -108,12 +112,13 @@ else
             _storedSettings = await SettingsManager.GetSettingsAsync();
             Settings = new ApplicationSettings()
             {
+                FreezeCtf = _storedSettings.FreezeCtf,
                 ActivationCode = _storedSettings.ActivationCode,
                 EnableSpawningCooldown = _storedSettings.EnableSpawningCooldown,
                 CooldownTimespan = _storedSettings.CooldownTimespan,
                 CooldownLimit = _storedSettings.CooldownLimit,
                 EnableVpnManager = _storedSettings.EnableVpnManager,
-                OpenVPNTemplate = _storedSettings.OpenVPNTemplate
+                OpenVpnTemplate = _storedSettings.OpenVpnTemplate
             };
             
             StateHasChanged();
@@ -127,6 +132,8 @@ else
 
         try
         {
+            _storedSettings!.FreezeCtf = Settings!.FreezeCtf;
+            
             _storedSettings!.ActivationCode = Settings!.ActivationCode;
             
             _storedSettings.EnableSpawningCooldown = Settings.EnableSpawningCooldown;
@@ -134,7 +141,7 @@ else
             _storedSettings.CooldownLimit = Settings.CooldownLimit;
             
             _storedSettings.EnableVpnManager = Settings.EnableVpnManager;
-            _storedSettings.OpenVPNTemplate = Settings.OpenVPNTemplate;
+            _storedSettings.OpenVpnTemplate = Settings.OpenVpnTemplate;
 
             if (Settings.EnableVpnManager)
                 await VpnCertificateManager.EnsureServerCertificatesCreatedAsync();

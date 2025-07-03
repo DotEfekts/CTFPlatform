@@ -58,7 +58,7 @@ else
         var user = (AuthenticationState != null ? (await AuthenticationState).User.FindFirstValue(ClaimTypes.NameIdentifier) : null) ?? "???";
         Logger.LogInformation("Admin requested instance kill - User: {UserId}, Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
             user, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title);
-        await InstanceManager.KillChallengeInstance(instance);
+        await InstanceManager.KillChallengeInstance(instance.Id);
         await _table.RefreshDataAsync();
     }
 }

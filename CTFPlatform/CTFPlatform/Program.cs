@@ -54,7 +54,7 @@ builder.Services.AddSingleton<IStoredSettingsManager<ApplicationSettings>, DbCon
 
 builder.Services.AddSingleton<IStoredSettingsManager<VpnInfo>, DbContextStoredSettingsManager<VpnInfo>>();
 builder.Services.AddSingleton<IVpnCertificateManager, AppVpnCertificateManager>();
-builder.Services.AddScoped<ICooldownManager, AppCooldownManager>();
+builder.Services.AddScoped<ICtfActivityManager, AppCtfActivityManager>();
 
 if (!Directory.Exists(builder.Configuration["UploadDirectory"]))
     throw new ConfigurationErrorsException("Invalid upload storage directory.");

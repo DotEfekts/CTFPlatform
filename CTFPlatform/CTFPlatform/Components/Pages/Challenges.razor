@@ -1,5 +1,6 @@
 @page "/challenges"
 @using System.Text.RegularExpressions
+@using CTFPlatform.Utilities
 @rendermode InteractiveServer
 
 @attribute [Authorize(Roles = CtfUser.UserRole)]
@@ -7,6 +8,7 @@
 
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject ICtfActivityManager ActivityManager
 
 <InitializeTimeZone />
 
@@ -15,7 +17,11 @@
 <h3 class="mb-2">Challenges</h3>
 <hr class="mt-2 mb-3" />
 
-@if (_challenges == null)
+@if (_freezeCtf)
+{
+    <h4 class="mb-2">This CTF is currently inactive. Please see the organiser for more information.</h4>
+}
+else if (_challenges == null)
 {
     <span><i>Loading...</i></span>
 }
@@ -55,15 +61,24 @@ else
 @code {
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private bool _freezeCtf;
     
     private ICollection<Challenge>? _challenges;
     private int[] _solvedFlags = [];
     private CtfUser? _user;
     private Challenge? _selectedChallenge;
 
+
+    protected override async Task OnInitializedAsync()
+    {
+        _freezeCtf = !await ActivityManager.CtfActive();
+        await base.OnInitializedAsync();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && !_freezeCtf)
         {
             await using var context = await DbFactory.CreateDbContextAsync();
         

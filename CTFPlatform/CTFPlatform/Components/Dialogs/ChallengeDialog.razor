@@ -1,5 +1,4 @@
 @using System.Timers
-@using CTFPlatform.Models.Settings
 @using CTFPlatform.Utilities
 @rendermode InteractiveServer
 @attribute [StreamRendering]
@@ -8,7 +7,7 @@
 
 @inject IDbContextFactory<BlazorCtfPlatformContext> DbFactory
 @inject IInstanceManager InstanceManager
-@inject ICooldownManager CooldownManager
+@inject ICtfActivityManager ActivityManager
 @inject IJSRuntime JsRuntime
 @inject TimeProvider TimeProvider
 @inject ILogger<ChallengeDialog> Logger
@@ -183,9 +182,9 @@
         if (firstRender)
         {
             await JsRuntime.InvokeVoidAsync("registerClickTrigger", DotNetObjectReference.Create(this), "CloseDialog", "challenge-modal");
-            if (Challenge is InstanceChallenge instanceChallenge && User != null)
+            if (Challenge is InstanceChallenge && User != null)
             {
-                _challengeInstance = await InstanceManager.CheckChallengeInstance(instanceChallenge, User);
+                _challengeInstance = await InstanceManager.CheckChallengeInstance(Challenge.Id, User.Id);
                 _checkingInstance = false;
                 if (_challengeInstance is { Host: "" or null })
                 {
@@ -210,7 +209,7 @@
     {
         try
         {
-            _challengeInstance = await InstanceManager.CheckChallengeInstance((Challenge as InstanceChallenge)!, User!);
+            _challengeInstance = await InstanceManager.CheckChallengeInstance(Challenge!.Id, User!.Id);
             if (_challengeInstance is { Host: "" or null })
             {
                 _challengeInstance = null;
@@ -250,6 +249,13 @@
                 return;
             }
 
+            if (!await ActivityManager.CtfActive())
+            {
+                _alertContent = "This CTF is currently inactive.";
+                _alertType = "alert-danger";
+                return;
+            }
+            
             if (string.IsNullOrWhiteSpace(_flagInput))
             {
                 _alertContent = "Please enter a flag to check.";
@@ -338,7 +344,7 @@
         _instancePending = true;
         StateHasChanged();
 
-        var cooldownTime = await CooldownManager.GetUserCooldown(User);
+        var cooldownTime = await ActivityManager.GetUserCooldown(User!.Id);
         _instanceCooldown = cooldownTime;
         if (_instanceCooldown != null)
         {
@@ -349,7 +355,7 @@
         
         Logger.LogInformation("Instance start request - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Challenge: ({ChallengeId}, {ChallengeName}).", 
             User!.Id, User.AuthId, User.DisplayName ?? User.Email, Challenge!.Id, Challenge.Title);
-        _challengeInstance = await InstanceManager.GetOrDeployChallengeInstance((Challenge as InstanceChallenge)!, User!);
+        _challengeInstance = await InstanceManager.GetOrDeployChallengeInstance(Challenge.Id, User!.Id);
         if (_challengeInstance == null)
             _instanceError = true;
         else
@@ -365,7 +371,7 @@
 
         Logger.LogInformation("Instance kill request - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
             User!.Id, User.AuthId, User.DisplayName ?? User.Email, _challengeInstance!.Id, _challengeInstance.LoggingInfo, Challenge!.Id, Challenge.Title);
-        if (!await InstanceManager.KillUserInstance(_challengeInstance!, User!))
+        if (!await InstanceManager.KillUserInstance(_challengeInstance.Id, User!.Id))
         {
             _instanceError = true;
         }

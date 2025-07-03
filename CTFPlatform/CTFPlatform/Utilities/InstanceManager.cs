@@ -6,10 +6,10 @@ namespace CTFPlatform.Utilities;
 
 public interface IInstanceManager
 {
-    Task<ChallengeInstance?> CheckChallengeInstance(InstanceChallenge challenge, CtfUser user);
-    Task<ChallengeInstance?> GetOrDeployChallengeInstance(InstanceChallenge challenge, CtfUser user);
-    Task<bool> KillUserInstance(ChallengeInstance challengeInstance, CtfUser user);
-    Task<bool> KillChallengeInstance(ChallengeInstance challengeInstance);
+    Task<ChallengeInstance?> CheckChallengeInstance(int challengeId, int userId);
+    Task<ChallengeInstance?> GetOrDeployChallengeInstance(int challengeId, int userId);
+    Task<bool> KillUserInstance(int instanceId, int userId);
+    Task<bool> KillChallengeInstance(int instanceId);
     Task Clean();
 }
 
@@ -38,35 +38,42 @@ public class TerraformInstanceManager(
     private readonly string _manifestPath = config["ManifestDirectory"] + Path.DirectorySeparatorChar;
     private readonly string _deploymentsPath = config["DeploymentDirectory"] + Path.DirectorySeparatorChar;
 
-    public async Task<ChallengeInstance?> CheckChallengeInstance(InstanceChallenge challenge, CtfUser user)
+    public async Task<ChallengeInstance?> CheckChallengeInstance(int challengeId, int userId)
     {
         await using var context = await dbFactory.CreateDbContextAsync();
         return context.UserInstances.Include(userInstance => userInstance.Instance)
-            .FirstOrDefault(t => t.User.Id == user.Id && !t.KillProcessed && t.Instance.Challenge.Id == challenge.Id)?.Instance;
+            .FirstOrDefault(t => t.User.Id == userId && !t.KillProcessed && t.Instance.Challenge.Id == challengeId)?.Instance;
     }
 
-    public async Task<ChallengeInstance?> GetOrDeployChallengeInstance(InstanceChallenge challenge, CtfUser user)
+    public async Task<ChallengeInstance?> GetOrDeployChallengeInstance(int challengeId, int userId)
     {
-        var instance = await CheckChallengeInstance(challenge, user);
+        var instance = await CheckChallengeInstance(challengeId, userId);
         if (instance != null)
             return instance;
 
         await using var context = await dbFactory.CreateDbContextAsync();
+        
+        var user = context.Users.FirstOrDefault(t => t.Id == userId);
+        var challenge = context.Challenges.OfType<InstanceChallenge>().FirstOrDefault(t => t.Id == challengeId);
+        if (user == null || challenge == null)
+            return null;
+        
         if (challenge.Shared)
         {           
             var sharedInstance = context.ChallengeInstances.FirstOrDefault(t => t.Challenge.Id == challenge.Id && !t.Destroyed);
-            var dbUser = context.Users.First(t => t.Id == user.Id);
+            
             if (sharedInstance != null)
             {
                 logger.LogInformation("User joining instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-                    dbUser.Id, dbUser.AuthId, dbUser.DisplayName ?? dbUser.Email, sharedInstance.Id, sharedInstance.LoggingInfo, challenge.Id, challenge.Title); 
+                    user.Id, user.AuthId, user.DisplayName ?? user.Email, sharedInstance.Id, sharedInstance.LoggingInfo, challenge.Id, challenge.Title); 
+                
                 sharedInstance.InstanceExpiry = DateTime.UtcNow.AddMinutes(challenge.ExpiryTime);
                 context.UserInstances.Add(new UserInstance
                 {
                     KillProcessed = false,
                     RequestCreated = DateTime.UtcNow,
                     Instance = sharedInstance,
-                    User = dbUser
+                    User = user
                 });
                 await context.SaveChangesAsync();
 
@@ -81,9 +88,6 @@ public class TerraformInstanceManager(
         do directory = Guid.NewGuid();
         while(Directory.Exists(_deploymentsPath + directory));
             
-        context.Attach(challenge).State = EntityState.Unchanged;
-        context.Attach(user).State = EntityState.Unchanged;
-        
         instance = new ChallengeInstance
         {
             Challenge = challenge,
@@ -133,51 +137,53 @@ public class TerraformInstanceManager(
         return instance;
     }
 
-    public async Task<bool> KillUserInstance(ChallengeInstance challengeInstance, CtfUser user)
+    public async Task<bool> KillUserInstance(int instanceId, int userId)
     {
         await using var context = await dbFactory.CreateDbContextAsync();
         
+        var user = context.Users.FirstOrDefault(t => t.Id == userId);
         var instance = context.ChallengeInstances
             .Include(i => i.Challenge)
             .Include(i => i.UserInstances)
                 .ThenInclude(userInstance => userInstance.User)
-            .FirstOrDefault(t => t.Id == challengeInstance.Id);
-
-        var userInstance = instance?.UserInstances.FirstOrDefault(t => !t.KillProcessed && t.User.Id == user.Id);
-        if (userInstance == null)
+            .FirstOrDefault(t => t.Id == instanceId);
+        
+        var userInstance = instance?.UserInstances.FirstOrDefault(t => !t.KillProcessed && t.User.Id == userId);
+        if (user == null || userInstance == null)
             return true;
 
         if (instance!.UserInstances.All(t => t.KillProcessed || t.Id == userInstance.Id))
         {
             logger.LogInformation("User killing instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
                 user.Id, user.AuthId, user.DisplayName ?? user.Email, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title);
-            return await KillChallengeInstance(instance);
+            return await KillChallengeInstance(instanceId);
         }
         
         logger.LogInformation("User left instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
             user.Id, user.AuthId, user.DisplayName ?? user.Email, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title); 
+        
         userInstance.KillProcessed = true;
         await context.SaveChangesAsync();
         return true;
 
     }
 
-    public async Task<bool> KillChallengeInstance(ChallengeInstance challengeInstance)
+    public async Task<bool> KillChallengeInstance(int instanceId)
     {
         await using var context = await dbFactory.CreateDbContextAsync();
         
         var instance = context.ChallengeInstances
             .Include(i => i.Challenge)
             .Include(i => i.UserInstances)
-            .FirstOrDefault(t => t.Id == challengeInstance.Id);
+            .FirstOrDefault(t => t.Id == instanceId);
         
         if(instance == null)
             return true;
             
         logger.LogTrace("Killing challenge instance - Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-            challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title); 
+            instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title); 
         
-        var directory = challengeInstance.DeploymentPath;
+        var directory = instance.DeploymentPath;
         var deploymentPath = _deploymentsPath + directory;
         if (Directory.Exists(deploymentPath))
         {
@@ -208,7 +214,7 @@ public class TerraformInstanceManager(
         await using var context = await dbFactory.CreateDbContextAsync();
         var expiredInstances = context.ChallengeInstances.Where(t => t.InstanceExpiry <= DateTime.UtcNow).ToList();
         foreach (var instance in expiredInstances)
-            await KillChallengeInstance(instance);
+            await KillChallengeInstance(instance.Id);
 
         var deploymentBasePath = new DirectoryInfo(_deploymentsPath);
         var deploymentFullName = deploymentBasePath.FullName + (deploymentBasePath.FullName.EndsWith(Path.DirectorySeparatorChar) ? "" : Path.DirectorySeparatorChar);

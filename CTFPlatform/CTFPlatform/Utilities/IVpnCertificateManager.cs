@@ -29,7 +29,7 @@ public class AppVpnCertificateManager(
     {
         var settings = await appSettingsManager.GetSettingsAsync();
         return settings.EnableVpnManager &&
-               !string.IsNullOrWhiteSpace(settings.OpenVPNTemplate);
+               !string.IsNullOrWhiteSpace(settings.OpenVpnTemplate);
     }
 
     public async Task EnsureServerCertificatesCreatedAsync()

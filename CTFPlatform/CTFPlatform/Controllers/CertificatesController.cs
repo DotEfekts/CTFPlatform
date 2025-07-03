@@ -96,7 +96,7 @@ public class CertificatesController(
     private async Task<byte[]> GenerateVpnConfigAsync(X509Certificate2 cert)
     {
         var settings = await settingsManager.GetSettingsAsync();
-        var template = settings.OpenVPNTemplate!;
+        var template = settings.OpenVpnTemplate!;
         
         template = template.Replace("$(ca.crt)", Encoding.UTF8.GetString(await certificateManager.GetCaCertificate()));
         template = template.Replace("$(client.crt)", cert.ExportCertificatePem());
