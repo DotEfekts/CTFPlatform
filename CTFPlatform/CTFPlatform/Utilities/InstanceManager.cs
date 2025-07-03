@@ -135,19 +135,26 @@ public class TerraformInstanceManager(
     public async Task<bool> KillUserInstance(ChallengeInstance challengeInstance, CtfUser user)
     {
         await using var context = await dbFactory.CreateDbContextAsync();
-        var userInstance = challengeInstance.UserInstances.FirstOrDefault(t => !t.KillProcessed && t.User == user);
+        
+        var instance = context.ChallengeInstances
+            .Include(i => i.Challenge)
+            .Include(i => i.UserInstances)
+                .ThenInclude(userInstance => userInstance.User)
+            .FirstOrDefault(t => t.Id == challengeInstance.Id);
+
+        var userInstance = instance?.UserInstances.FirstOrDefault(t => !t.KillProcessed && t.User.Id == user.Id);
         if (userInstance == null)
             return true;
 
-        if (challengeInstance.UserInstances.All(t => t.KillProcessed || t.Id == userInstance.Id))
+        if (instance!.UserInstances.All(t => t.KillProcessed || t.Id == userInstance.Id))
         {
             logger.LogInformation("User killing instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-                user.Id, user.AuthId, user.DisplayName ?? user.Email, challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title);
-            return await KillChallengeInstance(challengeInstance);
+                user.Id, user.AuthId, user.DisplayName ?? user.Email, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title);
+            return await KillChallengeInstance(instance);
         }
         
         logger.LogInformation("User left instance - User: ({UserId}, {UserAuthId}, {UserDisplayName}), Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-            user.Id, user.AuthId, user.DisplayName ?? user.Email, challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title); 
+            user.Id, user.AuthId, user.DisplayName ?? user.Email, instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title); 
         userInstance.KillProcessed = true;
         await context.SaveChangesAsync();
         return true;
@@ -181,7 +188,7 @@ public class TerraformInstanceManager(
             catch(Exception e)
             {
                 logger.LogError(e, "Instance destruction failed - Instance: ({InstanceId}, {InstanceLoggingInfo}), Challenge: ({ChallengeId}, {ChallengeName}).", 
-                    challengeInstance.Id, challengeInstance.LoggingInfo, challengeInstance.Challenge.Id, challengeInstance.Challenge.Title);
+                    instance.Id, instance.LoggingInfo, instance.Challenge.Id, instance.Challenge.Title);
                 return false;
             }
         }
